@@ -33,6 +33,23 @@ export class UIApp {
   })
   private focusedWidget?: UIWidget
   private activeWindow?: UIWindow
+  private readonly updateCallbacks: Array<(camera: THREE.PerspectiveCamera) => void> = []
+
+  public get sceneRoot(): THREE.Scene {
+    return this.scene
+  }
+
+  public get activeCamera(): THREE.PerspectiveCamera {
+    return this.camera
+  }
+
+  public get orbitController(): CameraOrbitController {
+    return this.cameraOrbitController
+  }
+
+  public registerUpdateCallback(fn: (camera: THREE.PerspectiveCamera) => void): void {
+    this.updateCallbacks.push(fn)
+  }
 
   constructor() {
     this.scene = new THREE.Scene()
@@ -172,6 +189,10 @@ export class UIApp {
       }
 
       this.topLevelSphereProjector.apply(rootWidget, this.camera, this.sceneOrientation)
+    }
+
+    for (const cb of this.updateCallbacks) {
+      cb(this.camera)
     }
 
     this.renderer.render(this.scene, this.camera)

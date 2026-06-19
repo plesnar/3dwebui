@@ -2,8 +2,12 @@ import './style.css'
 import { PlaneDragController } from './drag/PlaneDragController'
 import { SphereDragController } from './drag/SphereDragController'
 import { UIApp } from './app/UIApp'
+import { UILabel } from './widgets/UILabel'
 import { UIWidget } from './widgets/UIWidget'
 import { UIWindow } from './widgets/UIWindow'
+import { EyeTrackingController } from './app/EyeTrackingController'
+import { EyeTrackingOverlay } from './app/EyeTrackingOverlay'
+import { HeadGazeCameraController } from './app/HeadGazeCameraController'
 
 const app = new UIApp()
 const sphereDragController = new SphereDragController()
@@ -84,7 +88,61 @@ deepWidget.onClick((widget) => {
 })
 nestedWidget.addWidget(deepWidget)
 
+// Standalone label — demonstrates fixed text size independent of widget dimensions
+const labelA = new UILabel({
+  text: 'Hello, 3D!',
+  font: '600 48px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+  textColor: 0xf8fafc,
+  backgroundColor: 0x6366f1,
+  width: 2.0,
+  height: 0.5,
+  textAlign: 'left',
+  verticalAlign: 'top',
+})
+labelA.setPosition(0, -2, 0)
+labelA.setDragController(sphereDragController)
+labelA.onClick((label: UILabel) => {
+  label.textColor = Math.random() * 0xffffff
+})
+
+// Narrow label — same font size, text ellipsizes when it doesn't fit
+const labelB = new UILabel({
+  text: 'This text is intentionally too long to fit',
+  font: '400 48px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+  textColor: 0x1e293b,
+  backgroundColor: 0xfbbf24,
+  width: 1.0,
+  height: 0.4,
+})
+labelB.setPosition(3, -2, 0)
+labelB.setDragController(sphereDragController)
+
+// Label nested inside windowA
+const nestedLabel = new UILabel({
+  text: 'Nested label',
+  font: '400 36px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+  textColor: 0xffffff,
+  width: 1.2,
+  height: 0.28,
+})
+nestedLabel.setPosition(0, -0.45, 0.1)
+windowA.addWidget(nestedLabel)
+
 app.add(widgetA)
 app.add(widgetB)
 app.add(windowA)
 app.add(windowB)
+app.add(labelA)
+app.add(labelB)
+
+const eyeTracker = new EyeTrackingController()
+eyeTracker.init().then(() => {
+const eyeOverlay = new EyeTrackingOverlay(app.sceneRoot, app.activeCamera, eyeTracker)
+      app.registerUpdateCallback(() => eyeOverlay.update())
+
+  const headGaze = new HeadGazeCameraController(eyeTracker, app.orbitController)
+  app.registerUpdateCallback(() => headGaze.update())
+}).catch((err: unknown) => {
+  console.warn('Eye tracking unavailable:', err)
+})
+

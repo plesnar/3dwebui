@@ -8,6 +8,8 @@ export class CameraOrbitController {
 
   private yaw = 0
   private pitch = 0
+  private headYawOffset = 0
+  private headPitchOffset = 0
   private isBlocked = false
 
   private readonly activePointers = new Map<number, { x: number; y: number }>()
@@ -38,6 +40,13 @@ export class CameraOrbitController {
       }
       this.activePointers.clear()
     }
+  }
+
+  /** Called each frame by HeadGazeCameraController to compose head/gaze offset with orbit rotation. */
+  public setHeadOffset(yawOffset: number, pitchOffset: number): void {
+    this.headYawOffset = yawOffset
+    this.headPitchOffset = pitchOffset
+    this.recompute()
   }
 
   public dispose(): void {
@@ -99,15 +108,25 @@ export class CameraOrbitController {
     this.yaw -= event.deltaX * CameraOrbitController.WHEEL_SENSITIVITY
     this.pitch -= event.deltaY * CameraOrbitController.WHEEL_SENSITIVITY
     this.pitch = THREE.MathUtils.clamp(this.pitch, -Math.PI / 2, Math.PI / 2)
-    this.orientation.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'))
-    this.onOrientationChange(this.orientation)
+    this.recompute()
   }
 
   private applyDelta(dx: number, dy: number): void {
     this.yaw -= dx * CameraOrbitController.DRAG_SENSITIVITY
     this.pitch -= dy * CameraOrbitController.DRAG_SENSITIVITY
     this.pitch = THREE.MathUtils.clamp(this.pitch, -Math.PI / 2, Math.PI / 2)
-    this.orientation.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'))
+    this.recompute()
+  }
+
+  private recompute(): void {
+    const totalPitch = THREE.MathUtils.clamp(
+      this.pitch + this.headPitchOffset,
+      -Math.PI / 2,
+      Math.PI / 2,
+    )
+    this.orientation.setFromEuler(
+      new THREE.Euler(totalPitch, this.yaw + this.headYawOffset, 0, 'YXZ'),
+    )
     this.onOrientationChange(this.orientation)
   }
 }
