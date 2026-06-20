@@ -459,14 +459,14 @@ export class UIApp extends EventEmitter<AppEventMap> {
     const focusedWidget = this._focusedWidget
     const activeWindow = this._activeWindow
     if (focusedWidget) {
-      this.focusedWidgetBounds.setBounds(focusedWidget.width, focusedWidget.height)
+      this.focusedWidgetBounds.setBounds(focusedWidget.width, focusedWidget.height, focusedWidget.depth)
       this.focusedWidgetBounds.attachTo(focusedWidget)
     } else {
       this.focusedWidgetBounds.attachTo(undefined)
     }
 
     if (activeWindow && activeWindow !== focusedWidget) {
-      this.activeWindowBounds.setBounds(activeWindow.width, activeWindow.height)
+      this.activeWindowBounds.setBounds(activeWindow.width, activeWindow.height, activeWindow.depth)
       this.activeWindowBounds.attachTo(activeWindow)
     } else {
       this.activeWindowBounds.attachTo(undefined)

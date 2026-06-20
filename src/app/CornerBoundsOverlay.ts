@@ -12,6 +12,7 @@ type OverlayStyle = {
 
 export class CornerBoundsOverlay {
   private readonly lineSegments: THREE.LineSegments
+  private readonly zOffset: number
   private attachedTo?: UIWidget
 
   constructor(style: OverlayStyle) {
@@ -20,18 +21,21 @@ export class CornerBoundsOverlay {
       transparent: true,
       opacity: style.opacity ?? 0.7,
       linewidth: style.lineWidth ?? 1,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
     })
+
+    this.zOffset = style.zOffset ?? 0.006
 
     const geometry = new THREE.BufferGeometry()
     this.lineSegments = new THREE.LineSegments(geometry, material)
     this.lineSegments.visible = false
     this.lineSegments.renderOrder = 1000
-    this.lineSegments.position.z = style.zOffset ?? 0.006
+    this.lineSegments.position.z = this.zOffset
     this.lineSegments.userData['uiOverlay'] = true
     this.lineSegments.frustumCulled = false
 
-    this.updateGeometry(1, 1, style.padding ?? 0.04, style.cornerRatio ?? 0.2)
+    this.updateGeometry(1, 1, 0, style.padding ?? 0.04, style.cornerRatio ?? 0.2)
   }
 
   public attachTo(widget?: UIWidget): void {
@@ -54,8 +58,13 @@ export class CornerBoundsOverlay {
     this.lineSegments.visible = true
   }
 
-  public setBounds(width: number, height: number, padding = 0.04, cornerRatio = 0.2): void {
-    this.updateGeometry(width, height, padding, cornerRatio)
+  /**
+   * Updates the bracket geometry. When `depth` is greater than zero the overlay
+   * wraps a 3D box (brackets on all eight corners); otherwise it draws the flat
+   * four-corner brackets used for plane widgets.
+   */
+  public setBounds(width: number, height: number, depth = 0, padding = 0.04, cornerRatio = 0.2): void {
+    this.updateGeometry(width, height, depth, padding, cornerRatio)
   }
 
   public dispose(): void {
@@ -64,7 +73,7 @@ export class CornerBoundsOverlay {
     ;(this.lineSegments.material as THREE.Material).dispose()
   }
 
-  private updateGeometry(width: number, height: number, padding: number, cornerRatio: number): void {
+  private updateGeometry(width: number, height: number, depth: number, padding: number, cornerRatio: number): void {
     const paddedWidth = Math.max(0.01, width + padding * 2)
     const paddedHeight = Math.max(0.01, height + padding * 2)
     const halfW = paddedWidth / 2
@@ -74,21 +83,46 @@ export class CornerBoundsOverlay {
     const verticalLen = Math.max(0.02, Math.min(paddedHeight * Math.max(0.05, cornerRatio), paddedHeight / 2))
 
     const points: number[] = []
-    const addSegment = (x1: number, y1: number, x2: number, y2: number): void => {
-      points.push(x1, y1, 0, x2, y2, 0)
+    const addSegment = (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number): void => {
+      points.push(x1, y1, z1, x2, y2, z2)
     }
 
-    addSegment(-halfW, halfH, -halfW + horizontalLen, halfH)
-    addSegment(-halfW, halfH, -halfW, halfH - verticalLen)
+    if (depth > 1e-4) {
+      // 3D box: brackets on all eight corners, spanning the extruded depth.
+      this.lineSegments.position.z = 0
+      const zMin = -padding
+      const zMax = depth + padding
+      const paddedDepth = zMax - zMin
+      const depthLen = Math.max(0.02, Math.min(paddedDepth * Math.max(0.05, cornerRatio), paddedDepth / 2))
 
-    addSegment(halfW, halfH, halfW - horizontalLen, halfH)
-    addSegment(halfW, halfH, halfW, halfH - verticalLen)
+      for (const x of [-halfW, halfW]) {
+        for (const y of [-halfH, halfH]) {
+          for (const z of [zMin, zMax]) {
+            const sx = x < 0 ? 1 : -1
+            const sy = y < 0 ? 1 : -1
+            const sz = z === zMin ? 1 : -1
+            addSegment(x, y, z, x + sx * horizontalLen, y, z)
+            addSegment(x, y, z, x, y + sy * verticalLen, z)
+            addSegment(x, y, z, x, y, z + sz * depthLen)
+          }
+        }
+      }
+    } else {
+      // Flat plane: four corner brackets at z = 0, offset forward by zOffset.
+      this.lineSegments.position.z = this.zOffset
 
-    addSegment(-halfW, -halfH, -halfW + horizontalLen, -halfH)
-    addSegment(-halfW, -halfH, -halfW, -halfH + verticalLen)
+      addSegment(-halfW, halfH, 0, -halfW + horizontalLen, halfH, 0)
+      addSegment(-halfW, halfH, 0, -halfW, halfH - verticalLen, 0)
 
-    addSegment(halfW, -halfH, halfW - horizontalLen, -halfH)
-    addSegment(halfW, -halfH, halfW, -halfH + verticalLen)
+      addSegment(halfW, halfH, 0, halfW - horizontalLen, halfH, 0)
+      addSegment(halfW, halfH, 0, halfW, halfH - verticalLen, 0)
+
+      addSegment(-halfW, -halfH, 0, -halfW + horizontalLen, -halfH, 0)
+      addSegment(-halfW, -halfH, 0, -halfW, -halfH + verticalLen, 0)
+
+      addSegment(halfW, -halfH, 0, halfW - horizontalLen, -halfH, 0)
+      addSegment(halfW, -halfH, 0, halfW, -halfH + verticalLen, 0)
+    }
 
     this.lineSegments.geometry.dispose()
     this.lineSegments.geometry = new THREE.BufferGeometry()

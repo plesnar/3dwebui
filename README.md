@@ -14,6 +14,7 @@ A standout capability is **hands-free head & eye tracking**: using your webcam, 
 - **Widgets** — rectangular 3D panels (`UIWidget`) that can be nested arbitrarily deep
 - **Windows** — titled top-level panels (`UIWindow`) with borders, added directly to the app
 - **Labels** — text widgets (`UILabel`) with configurable font, color, alignment, and ellipsis
+- **Buttons** — procedurally extruded 3D buttons (`UIRectButton`) that physically depress on press, with configurable thickness, bevel, colors, and a centred label
 - **Typed events** — `UIWidget` and `UIApp` extend a typed `EventEmitter`; subscribe with `on`/`once`/`off` to events like `click`, `pointerenter/leave`, `focus/blur`, `dragstart/move/end`, `sizechange`, `dispose`, and app-level `focuschange`, `update`, `close`
 - **Widget state & transform** — `visible`, `enabled`, `opacity`, runtime `setSize`, `rotation`, and `scale`, plus identity (`id`, `name`) and `userData`
 - **Hierarchy & traversal** — `parent`, `addWidget`/`removeWidget`, `traverse`, `findById`, `findByName`, `contains`
@@ -74,10 +75,14 @@ src/
     UIWidget.ts
     UIWindow.ts
     UILabel.ts
+    UIButton.ts                # Abstract procedural 3D button base
+    UIRectButton.ts            # Rectangular extruded + beveled button
     WidgetOptions.ts
     WidgetEventMap.ts          # Widget event payload types
     WindowOptions.ts
     UILabelOptions.ts
+    UIButtonOptions.ts
+    UIRectButtonOptions.ts
   drag/                        # Drag controller implementations
     SphereDragController.ts
     PlaneDragController.ts
@@ -125,6 +130,44 @@ app.on('update', (event) => {
 
 // Tear everything down when finished.
 // app.close()
+```
+
+## Buttons
+
+Buttons are procedural 3D meshes (not flat planes) that physically depress when pressed. `UIButton` is the abstract base — it owns the extruded mesh, the press animation, and an optional centred label — while `UIRectButton` renders a rounded-rectangle face extruded and beveled along Z.
+
+- **Press feedback** — pointer-down smoothly reduces the extruded height and shifts to `pressedColor`; pointer-up/leave releases it. Read the live state via `button.pressed`.
+- **Geometry** — tune `thickness` (extruded height), `pressDepth` (how far the top face drops), and the rounded-rectangle `cornerRadius`.
+- **Bevel** — `bevelThickness`, `bevelSize`, `bevelOffset`, and `bevelSegments` map directly onto Three.js `ExtrudeGeometry` bevel settings.
+- **Color & label** — `color`/`pressedColor` style the face; `text`, `textColor`, and `font` render a label that sits on (and drops with) the top face.
+- **Clicks** — use `button.onClick((b) => ...)`; the handler receives the button instance. Clicks on the label still resolve to the button.
+
+```typescript
+import { UIRectButton } from './widgets/UIRectButton'
+
+const button = new UIRectButton({
+  name: 'primary-button',
+  text: 'Click Me',
+  width: 1.6,
+  height: 0.6,
+  thickness: 0.3,
+  bevelThickness: 0.06,
+  bevelSize: 0.04,
+  bevelSegments: 4,
+  color: 0x2563eb,
+  pressedColor: 0x1e3a8a,
+  textColor: 0xffffff,
+})
+button.setPosition(-2.4, 2.2, 0)
+button.setDragController(new SphereDragController())
+
+let clicks = 0
+button.onClick((b) => {
+  clicks += 1
+  b.text = `Clicked ${clicks}`
+})
+
+app.add(button)
 ```
 
 ## Lifecycle & Disposal

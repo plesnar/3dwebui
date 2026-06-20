@@ -10,6 +10,7 @@ Project is implemented using TypeScript and Three.js as a main library.
 - The app (`UIApp` class) is the main component which is reponsible for handling the 3d scene, the hierarchy of ui components, the rendering, interactions...
 - Widgets (`UIWidget` class) are ui components that can be nested. Widgets are displayed as 3d meshes (including planes).
 - Windows (`UIWindow` class) are special top-level widgets, which can be added only directly to an app.
+- Buttons (`UIButton` abstract base, `UIRectButton` concrete) are procedural extruded 3d meshes that depress on press. The base owns the mesh, press animation, and optional label; subclasses supply the extruded geometry.
 - Drag behavior is controller-driven and separated from widget models.
 - Top-level widgets are projected onto a camera-centered sphere using a fixed `sceneOrientation` (identity). Widget world positions do not depend on camera orientation.
 - The app tracks one focused widget and one active window globally.
@@ -41,7 +42,6 @@ Run `npm run build` after meaningful changes.
 - src/app: app-level orchestration and interaction plumbing
 - src/widgets: widget and window domain models
 - src/drag: drag contracts and drag controller implementations
-
 Key app-layer classes:
 - `UIApp` — scene, render loop, widget registry, interaction wiring
 - `PointerInteractionController` — pointer/click/drag dispatch; fires a camera-lock callback when a widget is active

@@ -328,6 +328,14 @@ export class UIWidget extends EventEmitter<WidgetEventMap> {
     return this
   }
 
+  /**
+   * Extruded depth along Z in world units. Plain plane widgets have no depth;
+   * 3D widgets (e.g. buttons) override this so selection bounds can wrap the box.
+   */
+  public get depth(): number {
+    return 0
+  }
+
   /** Hook for subclasses to rebuild geometry-dependent decorations on resize. */
   protected onResize(): void {}
 
