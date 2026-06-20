@@ -6,8 +6,11 @@ A framework and component library for building user interfaces in 3D space, impl
 
 3dwebui lets you compose interactive UI panels, windows, and labels as 3D meshes projected onto a camera-centered sphere. Widgets can be nested, dragged, clicked, and styled — all in a spatial environment rendered in the browser.
 
+A standout capability is **hands-free head & eye tracking**: using your webcam, the camera view follows your head pose and gaze in real time, so you can look around a 3D interface without touching the mouse.
+
 ## Features
 
+- **Head & eye tracking** — webcam-driven, hands-free camera control built on MediaPipe (see [Head & Eye Tracking](#head--eye-tracking)). Enabled by default and toggled live with the **H** key
 - **Widgets** — rectangular 3D panels (`UIWidget`) that can be nested arbitrarily deep
 - **Windows** — titled top-level panels (`UIWindow`) with borders, added directly to the app
 - **Labels** — text widgets (`UILabel`) with configurable font, color, alignment, and ellipsis
@@ -18,8 +21,8 @@ A framework and component library for building user interfaces in 3D space, impl
 - **Drag controllers** — swappable drag modes: `SphereDragController` (orbit on a sphere) and `PlaneDragController` (slide on a local plane)
 - **Pointer interaction** — click, hover, and drag dispatch with automatic camera-lock while a widget is active; disabled widgets opt out of picking
 - **Camera orbit** — mouse drag, trackpad two-finger swipe, and touch gestures rotate the camera
-- **Debug mode** — toggle with the **D** key (or the `debug` option / `app.debug` / `app.toggleDebug()`) to show the camera-feed overlay and an on-screen FPS counter
-- **Eye/gaze tracking** — optional `EyeTrackingController` and `HeadGazeCameraController` using MediaPipe
+- **Debug mode** — toggle with the **D** key (or the `debug` option / `app.debug` / `app.toggleDebug()`) to show the camera-feed overlay, an on-screen FPS counter, and the head-tracking status readout
+- **Keyboard shortcuts** — **D** toggles debug mode, **H** toggles head/eye tracking (see [Keyboard Shortcuts](#keyboard-shortcuts))
 
 ## Tech Stack
 
@@ -66,6 +69,7 @@ src/
     EyeTrackingOverlay.ts
     FpsOverlay.ts
     HeadGazeCameraController.ts
+    TrackingStatusOverlay.ts
   widgets/                     # Widget domain models
     UIWidget.ts
     UIWindow.ts
@@ -133,8 +137,9 @@ app.on('update', (event) => {
 
 Debug mode overlays diagnostic visuals on top of the scene:
 
-- A live **camera-feed overlay** (the eye/gaze-tracking view) in the corner.
+- A live **camera-feed overlay** (the eye/gaze-tracking view) in the corner, shown only while tracking is enabled.
 - An **FPS counter** pinned to the top-left of the screen.
+- A **tracking status** readout (`Tracking: ON` / `Tracking: OFF`) directly below the FPS counter.
 
 Toggle it at runtime by pressing **D** (ignored while typing in inputs), or control it from code:
 
@@ -144,6 +149,46 @@ const app = new UIApp({ debug: true }) // start with debug mode on
 app.debug = false      // disable
 app.toggleDebug()      // flip the current state
 app.on('debugchange', (event) => console.log('debug:', event.debug))
+```
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| **D** | Toggle debug mode (camera-feed overlay, FPS counter, tracking status) |
+| **H** | Toggle head/eye tracking on/off |
+
+Shortcuts are ignored while typing into an `input`, `textarea`, `select`, or any `contentEditable` element. Each shortcut has a programmatic equivalent (`app.toggleDebug()`, `app.toggleTracking()`).
+
+## Head & Eye Tracking
+
+3dwebui can drive the camera **hands-free** from your webcam. The `EyeTrackingController` runs MediaPipe's face-landmark model to estimate head pose and gaze, and the `HeadGazeCameraController` maps those into camera-orbit angles — so turning your head or shifting your gaze pans the view, like looking through a window into the 3D scene.
+
+- **Enabled by default** — tracking starts as soon as the webcam is granted.
+- **Toggle live with the H key**, or from code via `app.trackingEnabled` / `app.toggleTracking()`.
+- **Self-calibrating** — the neutral pose is captured from the first frames; toggling tracking off re-centres the camera and re-calibrates on the next enable.
+- **Privacy-aware** — webcam inference pauses while the tab is hidden (`pauseWhenHidden`), and the frame rate is capped (`fps`) to limit CPU/GPU load.
+- **Visualized in debug mode** — enable debug to see the live camera feed with iris circles plus head- and gaze-direction vectors, and the on-screen tracking status.
+
+```typescript
+import { EyeTrackingController } from './app/EyeTrackingController'
+import { HeadGazeCameraController } from './app/HeadGazeCameraController'
+
+const app = new UIApp({
+  enableTracking: true, // default; press "H" to toggle at runtime
+})
+
+const eyeTracker = new EyeTrackingController({ fps: 15, pauseWhenHidden: true })
+await eyeTracker.init() // prompts for webcam access
+
+if (app.orbitController) {
+  const headGaze = new HeadGazeCameraController(eyeTracker, app.orbitController)
+  app.registerUpdateCallback(() => {
+    if (app.trackingEnabled) headGaze.update()
+  })
+}
+
+app.on('trackingchange', (event) => console.log('tracking:', event.enabled))
 ```
 
 ## Architecture

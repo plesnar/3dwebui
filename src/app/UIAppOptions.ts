@@ -19,6 +19,8 @@ export type UIAppOptions = {
   pixelRatio?: number
   /** Enables empty-space camera orbit interaction. Defaults to true. */
   enableCameraOrbit?: boolean
+  /** Enables head/eye tracking. Toggle at runtime with the "H" key. Defaults to true. */
+  enableTracking?: boolean
   /** Starts the render loop immediately. Defaults to true. */
   autoStart?: boolean
   /** Starts the app in debug mode (camera feed + FPS counter). Defaults to false. */

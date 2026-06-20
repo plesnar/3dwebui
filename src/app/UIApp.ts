@@ -4,6 +4,7 @@ import { CornerBoundsOverlay } from './CornerBoundsOverlay'
 import { FpsOverlay } from './FpsOverlay'
 import { TopLevelSphereProjector } from './TopLevelSphereProjector'
 import { PointerInteractionController } from './PointerInteractionController'
+import { TrackingStatusOverlay } from './TrackingStatusOverlay'
 import { WidgetRegistry } from './WidgetRegistry'
 import { EventEmitter } from '../core/EventEmitter'
 import type { AppEventMap } from './AppEventMap'
@@ -37,10 +38,12 @@ export class UIApp extends EventEmitter<AppEventMap> {
     zOffset: 0.006,
   })
   private readonly fpsOverlay: FpsOverlay
+  private readonly trackingStatusOverlay: TrackingStatusOverlay
   private rafId: number | null = null
   private _running = false
   private _closed = false
   private _debug = false
+  private _trackingEnabled = true
 
   public get sceneRoot(): THREE.Scene {
     return this.scene
@@ -75,6 +78,19 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.setDebug(!this._debug)
   }
 
+  public get trackingEnabled(): boolean {
+    return this._trackingEnabled
+  }
+
+  public set trackingEnabled(value: boolean) {
+    this.setTrackingEnabled(value)
+  }
+
+  /** Flips head/eye tracking on/off. Bound to the "H" key by default. */
+  public toggleTracking(): void {
+    this.setTrackingEnabled(!this._trackingEnabled)
+  }
+
   /** Compatibility shim over `on('update', ...)`. */
   public registerUpdateCallback(fn: (camera: THREE.PerspectiveCamera) => void): void {
     this.on('update', (event) => fn(event.camera))
@@ -107,6 +123,9 @@ export class UIApp extends EventEmitter<AppEventMap> {
     window.addEventListener('keydown', this.handleKeyDown)
 
     this.fpsOverlay = new FpsOverlay(container)
+    this.trackingStatusOverlay = new TrackingStatusOverlay(container)
+    this._trackingEnabled = options.enableTracking ?? true
+    this.trackingStatusOverlay.setEnabled(this._trackingEnabled)
 
     if (options.enableCameraOrbit ?? true) {
       this.cameraOrbitController = new CameraOrbitController(
@@ -245,6 +264,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.focusedWidgetBounds.dispose()
     this.activeWindowBounds.dispose()
     this.fpsOverlay.dispose()
+    this.trackingStatusOverlay.dispose()
 
     for (const widget of [...this.widgetRegistry.topLevel]) {
       widget.dispose()
@@ -375,11 +395,22 @@ export class UIApp extends EventEmitter<AppEventMap> {
     }
     this._debug = value
     this.fpsOverlay.setVisible(value)
+    this.trackingStatusOverlay.setVisible(value)
     this.emit('debugchange', { type: 'debugchange', app: this, debug: value })
   }
 
+  private setTrackingEnabled(value: boolean): void {
+    if (this._trackingEnabled === value) {
+      return
+    }
+    this._trackingEnabled = value
+    this.trackingStatusOverlay.setEnabled(value)
+    this.emit('trackingchange', { type: 'trackingchange', app: this, enabled: value })
+  }
+
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'd' && event.key !== 'D') {
+    const key = event.key.toLowerCase()
+    if (key !== 'd' && key !== 'h') {
       return
     }
 
@@ -392,7 +423,11 @@ export class UIApp extends EventEmitter<AppEventMap> {
       return
     }
 
-    this.toggleDebug()
+    if (key === 'd') {
+      this.toggleDebug()
+    } else {
+      this.toggleTracking()
+    }
   }
 
   private readonly handleTrackedWidgetResize = (): void => {

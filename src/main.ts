@@ -199,14 +199,31 @@ eyeTracker
   .init()
   .then(() => {
     const eyeOverlay = new EyeTrackingOverlay(app.sceneRoot, app.activeCamera, eyeTracker)
-    // The camera feed is a debug-only visualization.
-    eyeOverlay.setVisible(app.debug)
-    app.on('debugchange', (event) => eyeOverlay.setVisible(event.debug))
-    app.registerUpdateCallback(() => eyeOverlay.update())
+    // The camera feed is a debug-only visualization, shown only while tracking is on.
+    const refreshOverlayVisibility = (): void =>
+      eyeOverlay.setVisible(app.debug && app.trackingEnabled)
+    refreshOverlayVisibility()
+    app.on('debugchange', refreshOverlayVisibility)
+    app.on('trackingchange', refreshOverlayVisibility)
+    app.registerUpdateCallback(() => {
+      if (app.trackingEnabled) {
+        eyeOverlay.update()
+      }
+    })
 
     if (app.orbitController) {
       const headGaze = new HeadGazeCameraController(eyeTracker, app.orbitController)
-      app.registerUpdateCallback(() => headGaze.update())
+      app.registerUpdateCallback(() => {
+        if (app.trackingEnabled) {
+          headGaze.update()
+        }
+      })
+      // Re-centre the camera and re-calibrate the neutral pose when toggled off.
+      app.on('trackingchange', (event) => {
+        if (!event.enabled) {
+          headGaze.calibrate()
+        }
+      })
     }
   })
   .catch((err: unknown) => {

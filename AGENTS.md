@@ -123,7 +123,6 @@ When implementing tasks:
 2. Make minimal, targeted edits.
 3. Validate with `npm run build`.
 4. If behavior changes, document it in PR/summary notes.
-5. Add small helpers when needed; avoid introducing heavy abstraction.
 
 ## Preferred Extension Points
 

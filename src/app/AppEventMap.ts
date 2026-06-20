@@ -29,6 +29,11 @@ export interface AppDebugChangeEvent extends AppEvent<'debugchange'> {
   readonly debug: boolean
 }
 
+/** Event fired when head/eye tracking is toggled on or off. */
+export interface AppTrackingChangeEvent extends AppEvent<'trackingchange'> {
+  readonly enabled: boolean
+}
+
 /** Per-frame event carrying the frame delta (seconds) and active camera. */
 export interface AppUpdateEvent<TType extends string> extends AppEvent<TType> {
   readonly delta: number
@@ -42,6 +47,7 @@ export type AppEventMap = {
   focuschange: AppFocusChangeEvent
   activewindowchange: AppActiveWindowChangeEvent
   debugchange: AppDebugChangeEvent
+  trackingchange: AppTrackingChangeEvent
   update: AppUpdateEvent<'update'>
   beforerender: AppUpdateEvent<'beforerender'>
   afterrender: AppUpdateEvent<'afterrender'>
