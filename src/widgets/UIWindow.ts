@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { UIWidget } from './UIWidget'
+import { UILabel } from './UILabel'
+import { UIRectButton } from './UIRectButton'
 import type { UIWindowOptions } from './WindowOptions'
 
 export class UIWindow extends UIWidget {
@@ -8,8 +10,8 @@ export class UIWindow extends UIWidget {
   private _title: string
 
   private readonly borderMeshes: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = []
-  private titleMesh?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
-  private titleTexture?: THREE.CanvasTexture
+  private readonly titleLabel: UILabel
+  private readonly closeButton: UIRectButton
 
   constructor(options: UIWindowOptions = {}) {
     super(options)
@@ -18,7 +20,13 @@ export class UIWindow extends UIWidget {
     this._borderColor = options.borderColor ?? 0xe5e7eb
     this._title = options.title ?? 'Window'
 
+    this.titleLabel = this.createTitleLabel()
+    this.closeButton = this.createCloseButton()
+    this.addWidget(this.titleLabel)
+    this.addWidget(this.closeButton)
+
     this.rebuildDecorations()
+    this.layoutHeaderWidgets()
   }
 
   public override onClick(handler: (widget: UIWindow) => void): this {
@@ -34,20 +42,11 @@ export class UIWindow extends UIWidget {
 
   protected override onResize(): void {
     this.rebuildDecorations()
+    this.layoutHeaderWidgets()
   }
 
   protected override disposeResources(): void {
     this.clearBorders()
-    if (this.titleMesh) {
-      this.mesh.remove(this.titleMesh)
-      this.titleMesh.geometry.dispose()
-      this.titleMesh.material.dispose()
-      this.titleMesh = undefined
-    }
-    if (this.titleTexture) {
-      this.titleTexture.dispose()
-      this.titleTexture = undefined
-    }
   }
 
   public get borderSize(): number {
@@ -57,6 +56,7 @@ export class UIWindow extends UIWidget {
   public set borderSize(value: number) {
     this._borderSize = Math.max(0, value)
     this.rebuildDecorations()
+    this.layoutHeaderWidgets()
   }
 
   public get borderColor(): number {
@@ -74,14 +74,12 @@ export class UIWindow extends UIWidget {
 
   public set title(value: string) {
     this._title = value
-    this.updateTitleTexture()
+    this.titleLabel.text = value
   }
 
   private rebuildDecorations(): void {
     this.clearBorders()
     this.createBorders()
-    this.createOrUpdateTitleMesh()
-    this.updateTitleTexture()
   }
 
   private clearBorders(): void {
@@ -109,6 +107,7 @@ export class UIWindow extends UIWidget {
         new THREE.MeshBasicMaterial({ color: this._borderColor, side: THREE.DoubleSide }),
       )
       strip.position.set(x, y, 0.001)
+      strip.userData['uiOverlay'] = true
       this.mesh.add(strip)
       this.borderMeshes.push(strip)
     }
@@ -133,43 +132,45 @@ export class UIWindow extends UIWidget {
     }
   }
 
-  private createOrUpdateTitleMesh(): void {
-    if (this.titleMesh) {
-      this.mesh.remove(this.titleMesh)
-      this.titleMesh.geometry.dispose()
-      this.titleMesh.material.dispose()
-      this.titleMesh = undefined
-    }
-
-    if (this.titleTexture) {
-      this.titleTexture.dispose()
-      this.titleTexture = undefined
-    }
-
-    const canvas = document.createElement('canvas')
-    canvas.width = 1024
-    canvas.height = 256
-
-    this.titleTexture = new THREE.CanvasTexture(canvas)
-    this.titleTexture.colorSpace = THREE.SRGBColorSpace
-    this.titleTexture.needsUpdate = true
-
-    const material = new THREE.MeshBasicMaterial({
-      map: this.titleTexture,
-      transparent: true,
-      side: THREE.DoubleSide,
+  private createTitleLabel(): UILabel {
+    const label = new UILabel({
+      text: this._title,
+      textColor: 0xe11d48,
+      textAlign: 'left',
+      verticalAlign: 'middle',
+      font: '600 44px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+      width: 1,
+      height: 0.2,
+      position: [0, 0, 0.002],
     })
-
-    this.titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material)
-    this.mesh.add(this.titleMesh)
+    // The title should not steal interaction from the window surface.
+    label.mesh.userData['uiOverlay'] = true
+    return label
   }
 
-  private updateTitleTexture(): void {
-    if (!this.titleTexture || !this.titleMesh) {
-      return
-    }
+  private createCloseButton(): UIRectButton {
+    const button = new UIRectButton({
+      text: 'x',
+      textColor: 0xffffff,
+      font: '700 40px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
+      width: 0.18,
+      height: 0.18,
+      thickness: 0.08,
+      pressDepth: 0.03,
+      cornerRadius: 0.05,
+      bevelThickness: 0.02,
+      bevelSize: 0.01,
+      color: 0xdc2626,
+      pressedColor: 0x991b1b,
+      position: [0, 0, 0.003],
+    })
+    button.onClick(() => {
+      this.dispose()
+    })
+    return button
+  }
 
-    const canvas = this.titleTexture.image as HTMLCanvasElement
+  private layoutHeaderWidgets(): void {
     const thickness = Math.min(this._borderSize, this.width / 2, this.height / 2)
     const titleBarHeight = this.getTitleBarHeight(thickness)
 
@@ -178,72 +179,25 @@ export class UIWindow extends UIWidget {
     const contentHeight = Math.max(0.08, contentTop - contentBottom)
 
     const horizontalPadding = Math.max(0.04, thickness * 1.2)
-    const verticalPadding = Math.max(0.01, contentHeight * 0.14)
-    const titleHeight = Math.max(0.06, contentHeight - 2 * verticalPadding)
-    const maxTitleWidth = Math.max(0.1, this.width - 2 * horizontalPadding)
-
-    const canvasHeight = 256
-    const canvasWidth = Math.max(256, Math.round(canvasHeight * (maxTitleWidth / titleHeight)))
-    if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
-      canvas.width = canvasWidth
-      canvas.height = canvasHeight
-    }
-
-    const context = canvas.getContext('2d')
-    if (!context) {
-      return
-    }
-
-    const titleWidth = maxTitleWidth
-
-    this.titleMesh.geometry.dispose()
-    this.titleMesh.geometry = new THREE.PlaneGeometry(titleWidth, titleHeight)
-    this.titleMesh.position.set(
-      -this.width / 2 + horizontalPadding + titleWidth / 2,
-      (contentTop + contentBottom) / 2,
-      0.002,
+    const closeSize = Math.min(Math.max(0.12, contentHeight * 0.72), Math.max(0.12, this.width * 0.28))
+    const closeX = THREE.MathUtils.clamp(
+      this.width / 2 - thickness - horizontalPadding - closeSize / 2,
+      -this.width / 2 + closeSize / 2,
+      this.width / 2 - closeSize / 2,
     )
+    const centerY = (contentTop + contentBottom) / 2
 
-    const text = this._title.trim().length > 0 ? this._title : ' '
-    const horizontalPaddingPx = 28
-    const drawFontPx = Math.max(20, Math.floor(canvas.height * 0.54))
-    const fontFamily = '"Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif'
-    const maxTextWidth = Math.max(0, canvas.width - horizontalPaddingPx * 2)
+    const titleLeft = -this.width / 2 + thickness + horizontalPadding
+    const titleRight = closeX - closeSize / 2 - horizontalPadding
+    const titleWidth = Math.max(0.08, titleRight - titleLeft)
+    const titleHeight = Math.max(0.06, contentHeight - 0.02)
+    const titleVerticalOffset = Math.min(0.01, contentHeight * 0.12)
 
-    context.clearRect(0, 0, canvas.width, canvas.height)
-    context.fillStyle = '#e11d48'
-    context.font = `600 ${drawFontPx}px ${fontFamily}`
-    context.textAlign = 'left'
-    context.textBaseline = 'middle'
-    const displayTitle = this.ellipsizeText(context, text, maxTextWidth)
-    context.fillText(displayTitle, horizontalPaddingPx, canvas.height / 2)
+    this.titleLabel.setSize(titleWidth, titleHeight)
+    this.titleLabel.setPosition(titleLeft + titleWidth / 2, centerY - titleVerticalOffset, 0.002)
 
-    this.titleTexture.needsUpdate = true
-  }
-
-  private ellipsizeText(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
-    if (context.measureText(text).width <= maxWidth) {
-      return text
-    }
-
-    const ellipsis = '...'
-    if (context.measureText(ellipsis).width > maxWidth) {
-      return ''
-    }
-
-    let low = 0
-    let high = text.length
-    while (low < high) {
-      const mid = Math.ceil((low + high) / 2)
-      const candidate = `${text.slice(0, mid)}${ellipsis}`
-      if (context.measureText(candidate).width <= maxWidth) {
-        low = mid
-      } else {
-        high = mid - 1
-      }
-    }
-
-    return `${text.slice(0, low)}${ellipsis}`
+    this.closeButton.setSize(closeSize, closeSize)
+    this.closeButton.setPosition(closeX, centerY, 0.003)
   }
 
   private getTitleBarHeight(borderThickness: number): number {

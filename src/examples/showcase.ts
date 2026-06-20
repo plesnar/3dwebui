@@ -147,7 +147,7 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
     textColor: 0xe2e8f0,
     width: 1.6,
     height: 0.3,
-    position: [0, 0.55, 0.06],
+    position: [0, 0.3, 0.06],
   })
   window.addWidget(heading)
 

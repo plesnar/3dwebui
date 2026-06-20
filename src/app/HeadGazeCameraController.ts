@@ -54,7 +54,7 @@ export class HeadGazeCameraController {
     this.eyeTracker = eyeTracker
     this.orbitController = orbitController
     this.headSensitivity = options.headSensitivity ?? 2.0
-    this.gazeSensitivity = options.gazeSensitivity ?? 3.0
+    this.gazeSensitivity = options.gazeSensitivity ?? 4.0
   }
 
   /** Reset the neutral pose — the next CALIBRATION_FRAMES frames with a detected face become the new baseline. */
