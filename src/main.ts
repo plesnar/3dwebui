@@ -9,32 +9,71 @@ import { EyeTrackingController } from './app/EyeTrackingController'
 import { EyeTrackingOverlay } from './app/EyeTrackingOverlay'
 import { HeadGazeCameraController } from './app/HeadGazeCameraController'
 
-const app = new UIApp()
+// ── app ───────────────────────────────────────────────────────────────────
+// Construct the app with explicit options instead of relying on defaults.
+const app = new UIApp({
+  backgroundColor: 0x111827,
+  camera: { position: { x: 0, y: 0, z: 5 } },
+  debug: true,
+})
+
+// App-level events: react to focus/active-window changes globally.
+app.on('focuschange', (event) => {
+  console.log('focus:', event.focused?.name || event.focused?.id || '(none)')
+})
+app.on('activewindowchange', (event) => {
+  console.log('active window:', event.activeWindow?.title ?? '(none)')
+})
+app.on('close', () => {
+  document.body.style.background = '#000'
+})
+
 const sphereDragController = new SphereDragController()
 
+// ── hover + click widget ────────────────────────────────────────────────────
+// Demonstrates pointer hover events (scale pulse) and click recolouring.
 const widgetA = new UIWidget({
+  name: 'orange-tile',
   backgroundColor: 0xf97316,
   width: 1.8,
   height: 1.2,
 })
 widgetA.setPosition(-2, 0, 0)
 widgetA.setDragController(sphereDragController)
-widgetA.onClick((widget) => {
-  widget.setBackgroundColor(Math.random() * 0xffffff)
-})
+widgetA.on('pointerenter', () => widgetA.setScale(1.1))
+widgetA.on('pointerleave', () => widgetA.setScale(1))
+widgetA.onClick((widget) => widget.setBackgroundColor(Math.random() * 0xffffff))
 
+// ── opacity-on-hover widget ─────────────────────────────────────────────────
 const widgetB = new UIWidget({
+  name: 'green-tile',
   backgroundColor: 0x22c55e,
   width: 1.2,
   height: 1.8,
+  opacity: 0.55,
 })
 widgetB.setPosition(2, 0, 0)
 widgetB.setDragController(sphereDragController)
-widgetB.onClick((widget) => {
-  widget.setBackgroundColor(Math.random() * 0xffffff)
-})
+widgetB.on('pointerenter', () => (widgetB.opacity = 1))
+widgetB.on('pointerleave', () => (widgetB.opacity = 0.55))
+widgetB.onClick((widget) => widget.setBackgroundColor(Math.random() * 0xffffff))
 
+// ── disabled widget ─────────────────────────────────────────────────────────
+// `enabled: false` opts the widget out of picking, hover and clicks.
+const disabledWidget = new UIWidget({
+  name: 'disabled-tile',
+  backgroundColor: 0x64748b,
+  width: 1.0,
+  height: 0.6,
+  enabled: false,
+})
+disabledWidget.setPosition(-2, -2, 0)
+disabledWidget.setDragController(sphereDragController)
+disabledWidget.onClick(() => console.log('this should never fire while disabled'))
+
+// ── window that resizes itself on click ─────────────────────────────────────
 const windowA = new UIWindow({
+  name: 'control-panel',
   width: 2.9,
   height: 1.6,
   borderSize: 0.01,
@@ -43,53 +82,84 @@ const windowA = new UIWindow({
 })
 windowA.setPosition(0, 0, 0)
 windowA.setDragController(sphereDragController)
-windowA.onClick((windowWidget) => {
-  windowWidget.borderColor = Math.random() * 0xffffff
-  windowWidget.title = `Border Color: #${windowWidget.borderColor.toString(16).padStart(6, '0')}`
+let panelWide = false
+windowA.onClick((win) => {
+  panelWide = !panelWide
+  win.setSize(panelWide ? 3.6 : 2.9, 1.6)
+  win.title = panelWide ? 'Control Panel (wide)' : 'Control Panel'
 })
 
-const windowB = new UIWindow({
-  width: 2.2,
-  height: 1.2,
-  borderSize: 0.015,
-  borderColor: 0x38bdf8,
-  title: 'Inspector',
-})
-windowB.setPosition(3, 0, 0)
-windowB.setDragController(sphereDragController)
-windowB.onClick((windowWidget) => {
-  windowWidget.borderColor = Math.random() * 0xffffff
-  windowWidget.title = `Inspector: #${windowWidget.borderColor.toString(16).padStart(6, '0')}`
-})
-
-// Nested widget inside windowA (allowed: UIWidget.canBeNested = true)
+// ── nested + deeply nested widgets ───────────────────────────────────────────
 const nestedWidget = new UIWidget({
+  name: 'nested',
   backgroundColor: 0x0ea5e9,
   width: 0.85,
   height: 0.5,
 })
 nestedWidget.setPosition(0, 0, 0.1)
 nestedWidget.setDragController(new PlaneDragController())
-nestedWidget.onClick((widget) => {
-  widget.setBackgroundColor(Math.random() * 0xffffff)
-})
+nestedWidget.onClick((widget) => widget.setBackgroundColor(Math.random() * 0xffffff))
 windowA.addWidget(nestedWidget)
 
-// Deeply nested widget inside nestedWidget (multi-level nesting: UIWidget in UIWidget)
 const deepWidget = new UIWidget({
+  name: 'deep',
   backgroundColor: 0xf43f5e,
   width: 0.35,
   height: 0.2,
 })
 deepWidget.setPosition(0, 0, 0.1)
 deepWidget.setDragController(new PlaneDragController())
-deepWidget.onClick((widget) => {
-  widget.setBackgroundColor(Math.random() * 0xffffff)
-})
+deepWidget.onClick((widget) => widget.setBackgroundColor(Math.random() * 0xffffff))
 nestedWidget.addWidget(deepWidget)
 
-// Standalone label — demonstrates fixed text size independent of widget dimensions
+// ── self-disposing widget ────────────────────────────────────────────────────
+// Clicking removes the widget from the app and frees its GPU resources.
+const disposableWidget = new UILabel({
+  name: 'dispose-me',
+  text: 'Click to remove me',
+  textColor: 0x0b1120,
+  backgroundColor: 0xfde047,
+  width: 1.6,
+  height: 0.4,
+})
+disposableWidget.setPosition(-3, 2, 0)
+disposableWidget.setDragController(sphereDragController)
+disposableWidget.on('dispose', () => console.log('disposed:', disposableWidget.id))
+disposableWidget.onClick((label) => {
+  app.remove(label)
+  label.dispose()
+})
+
+// ── spinning widget driven by the update event ───────────────────────────────
+const spinner = new UIWidget({
+  name: 'spinner',
+  backgroundColor: 0xa855f7,
+  width: 0.6,
+  height: 0.6,
+})
+spinner.setPosition(3, 2, 0)
+app.on('update', (event) => {
+  spinner.rotation.z += event.delta * 1.5
+})
+
+// ── close-app control ─────────────────────────────────────────────────────────
+const closeButton = new UILabel({
+  name: 'close-app',
+  text: 'Close App',
+  textColor: 0xffffff,
+  backgroundColor: 0xdc2626,
+  width: 1.4,
+  height: 0.4,
+})
+closeButton.setPosition(3, -2, 0)
+closeButton.setDragController(sphereDragController)
+closeButton.on('pointerenter', () => (closeButton.backgroundColor = 0xef4444))
+closeButton.on('pointerleave', () => (closeButton.backgroundColor = 0xdc2626))
+closeButton.onClick(() => app.close())
+
+// ── standalone labels ────────────────────────────────────────────────────────
 const labelA = new UILabel({
+  name: 'hello-label',
   text: 'Hello, 3D!',
   font: '600 48px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
   textColor: 0xf8fafc,
@@ -101,24 +171,10 @@ const labelA = new UILabel({
 })
 labelA.setPosition(0, -2, 0)
 labelA.setDragController(sphereDragController)
-labelA.onClick((label: UILabel) => {
-  label.textColor = Math.random() * 0xffffff
-})
+labelA.onClick((label) => (label.textColor = Math.random() * 0xffffff))
 
-// Narrow label — same font size, text ellipsizes when it doesn't fit
-const labelB = new UILabel({
-  text: 'This text is intentionally too long to fit',
-  font: '400 48px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
-  textColor: 0x1e293b,
-  backgroundColor: 0xfbbf24,
-  width: 1.0,
-  height: 0.4,
-})
-labelB.setPosition(3, -2, 0)
-labelB.setDragController(sphereDragController)
-
-// Label nested inside windowA
 const nestedLabel = new UILabel({
+  name: 'nested-label',
   text: 'Nested label',
   font: '400 36px "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif',
   textColor: 0xffffff,
@@ -130,19 +186,30 @@ windowA.addWidget(nestedLabel)
 
 app.add(widgetA)
 app.add(widgetB)
+app.add(disabledWidget)
 app.add(windowA)
-app.add(windowB)
+app.add(disposableWidget)
+app.add(spinner)
+app.add(closeButton)
 app.add(labelA)
-app.add(labelB)
 
-const eyeTracker = new EyeTrackingController()
-eyeTracker.init().then(() => {
-const eyeOverlay = new EyeTrackingOverlay(app.sceneRoot, app.activeCamera, eyeTracker)
-      app.registerUpdateCallback(() => eyeOverlay.update())
+// ── optional eye / head-gaze integration ──────────────────────────────────────
+const eyeTracker = new EyeTrackingController({ fps: 15, pauseWhenHidden: true })
+eyeTracker
+  .init()
+  .then(() => {
+    const eyeOverlay = new EyeTrackingOverlay(app.sceneRoot, app.activeCamera, eyeTracker)
+    // The camera feed is a debug-only visualization.
+    eyeOverlay.setVisible(app.debug)
+    app.on('debugchange', (event) => eyeOverlay.setVisible(event.debug))
+    app.registerUpdateCallback(() => eyeOverlay.update())
 
-  const headGaze = new HeadGazeCameraController(eyeTracker, app.orbitController)
-  app.registerUpdateCallback(() => headGaze.update())
-}).catch((err: unknown) => {
-  console.warn('Eye tracking unavailable:', err)
-})
+    if (app.orbitController) {
+      const headGaze = new HeadGazeCameraController(eyeTracker, app.orbitController)
+      app.registerUpdateCallback(() => headGaze.update())
+    }
+  })
+  .catch((err: unknown) => {
+    console.warn('Eye tracking unavailable:', err)
+  })
 

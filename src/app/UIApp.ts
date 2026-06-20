@@ -1,19 +1,24 @@
 import * as THREE from 'three'
 import { CameraOrbitController } from './CameraOrbitController'
 import { CornerBoundsOverlay } from './CornerBoundsOverlay'
+import { FpsOverlay } from './FpsOverlay'
 import { TopLevelSphereProjector } from './TopLevelSphereProjector'
 import { PointerInteractionController } from './PointerInteractionController'
 import { WidgetRegistry } from './WidgetRegistry'
+import { EventEmitter } from '../core/EventEmitter'
+import type { AppEventMap } from './AppEventMap'
+import type { UIAppOptions } from './UIAppOptions'
 import type { UIWidget } from '../widgets/UIWidget'
 import { UIWindow } from '../widgets/UIWindow'
 
-export class UIApp {
+export class UIApp extends EventEmitter<AppEventMap> {
   private readonly scene: THREE.Scene
   private readonly camera: THREE.PerspectiveCamera
   private readonly renderer: THREE.WebGLRenderer
   private readonly raycaster: THREE.Raycaster
+  private readonly clock = new THREE.Clock()
   private readonly sceneOrientation = new THREE.Quaternion()
-  private readonly cameraOrbitController: CameraOrbitController
+  private readonly cameraOrbitController?: CameraOrbitController
   private readonly widgetRegistry = new WidgetRegistry()
   private readonly topLevelSphereProjector = new TopLevelSphereProjector()
   private readonly pointerInteractionController: PointerInteractionController
@@ -31,9 +36,11 @@ export class UIApp {
     cornerRatio: 0.22,
     zOffset: 0.006,
   })
-  private focusedWidget?: UIWidget
-  private activeWindow?: UIWindow
-  private readonly updateCallbacks: Array<(camera: THREE.PerspectiveCamera) => void> = []
+  private readonly fpsOverlay: FpsOverlay
+  private rafId: number | null = null
+  private _running = false
+  private _closed = false
+  private _debug = false
 
   public get sceneRoot(): THREE.Scene {
     return this.scene
@@ -43,28 +50,70 @@ export class UIApp {
     return this.camera
   }
 
-  public get orbitController(): CameraOrbitController {
+  public get orbitController(): CameraOrbitController | undefined {
     return this.cameraOrbitController
   }
 
-  public registerUpdateCallback(fn: (camera: THREE.PerspectiveCamera) => void): void {
-    this.updateCallbacks.push(fn)
+  public get running(): boolean {
+    return this._running
   }
 
-  constructor() {
+  public get closed(): boolean {
+    return this._closed
+  }
+
+  public get debug(): boolean {
+    return this._debug
+  }
+
+  public set debug(value: boolean) {
+    this.setDebug(value)
+  }
+
+  /** Flips debug mode on/off. Bound to the "D" key by default. */
+  public toggleDebug(): void {
+    this.setDebug(!this._debug)
+  }
+
+  /** Compatibility shim over `on('update', ...)`. */
+  public registerUpdateCallback(fn: (camera: THREE.PerspectiveCamera) => void): void {
+    this.on('update', (event) => fn(event.camera))
+  }
+
+  constructor(options: UIAppOptions = {}) {
+    super()
+
+    const container = options.container ?? document.body
+
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(0x111827)
+    this.scene.background = new THREE.Color(options.backgroundColor ?? 0x111827)
 
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100)
-    this.camera.position.set(0, 0, 5)
+    this.camera = new THREE.PerspectiveCamera(
+      options.camera?.fov ?? 75,
+      window.innerWidth / window.innerHeight,
+      options.camera?.near ?? 0.1,
+      options.camera?.far ?? 100,
+    )
+    const cameraPosition = options.camera?.position ?? { x: 0, y: 0, z: 5 }
+    this.camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z)
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    this.renderer = new THREE.WebGLRenderer({ antialias: options.antialias ?? true })
     this.renderer.setSize(window.innerWidth, window.innerHeight)
-    this.renderer.setPixelRatio(window.devicePixelRatio)
-    document.body.appendChild(this.renderer.domElement)
+    this.renderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio)
+    container.appendChild(this.renderer.domElement)
 
     this.raycaster = new THREE.Raycaster()
     window.addEventListener('resize', this.handleResize)
+    window.addEventListener('keydown', this.handleKeyDown)
+
+    this.fpsOverlay = new FpsOverlay(container)
+
+    if (options.enableCameraOrbit ?? true) {
+      this.cameraOrbitController = new CameraOrbitController(
+        this.renderer.domElement,
+        (orientation) => this.camera.quaternion.copy(orientation),
+      )
+    }
 
     this.pointerInteractionController = new PointerInteractionController(
       this.renderer.domElement,
@@ -72,20 +121,188 @@ export class UIApp {
       this.raycaster,
       this.pickWidgetAtPointer,
       this.handleWidgetInteraction,
-      (locked) => this.cameraOrbitController.setBlocked(locked),
+      (locked) => this.cameraOrbitController?.setBlocked(locked),
       () => this.sceneOrientation,
     )
 
-    this.cameraOrbitController = new CameraOrbitController(
-      this.renderer.domElement,
-      (orientation) => this.camera.quaternion.copy(orientation),
-    )
+    if (options.debug) {
+      this.setDebug(true)
+    }
 
-    this.animate()
+    if (options.autoStart ?? true) {
+      this.start()
+    }
   }
 
-  public add(widget: UIWidget): void {
+  // ── collection ────────────────────────────────────────────────────────────
+
+  public add(widget: UIWidget): this {
     this.widgetRegistry.add(widget, this.scene)
+    widget.handleAttached()
+    this.emit('widgetadded', { type: 'widgetadded', app: this, widget })
+    return this
+  }
+
+  public remove(widget: UIWidget): this {
+    if (!this.widgetRegistry.topLevel.includes(widget)) {
+      return this
+    }
+
+    if (this.focusedWidget && (this.focusedWidget === widget || widget.contains(this.focusedWidget))) {
+      this.setFocus(undefined)
+    }
+
+    this.widgetRegistry.remove(widget, this.scene)
+    widget.handleDetached()
+    this.emit('widgetremoved', { type: 'widgetremoved', app: this, widget })
+    return this
+  }
+
+  public removeAll(): this {
+    for (const widget of [...this.widgetRegistry.topLevel]) {
+      this.remove(widget)
+    }
+    return this
+  }
+
+  public get widgets(): readonly UIWidget[] {
+    return this.widgetRegistry.topLevel
+  }
+
+  public getWidgetById(id: string): UIWidget | undefined {
+    return this.findWidget((widget) => widget.id === id)
+  }
+
+  public findWidget(predicate: (widget: UIWidget) => boolean): UIWidget | undefined {
+    for (const root of this.widgetRegistry.topLevel) {
+      const match = root.find(predicate)
+      if (match) {
+        return match
+      }
+    }
+    return undefined
+  }
+
+  public traverse(visitor: (widget: UIWidget) => void): void {
+    for (const root of this.widgetRegistry.topLevel) {
+      root.traverse(visitor)
+    }
+  }
+
+  // ── focus ─────────────────────────────────────────────────────────────────
+
+  public get focusedWidget(): UIWidget | undefined {
+    return this._focusedWidget
+  }
+
+  public get activeWindow(): UIWindow | undefined {
+    return this._activeWindow
+  }
+
+  public focus(widget?: UIWidget): void {
+    this.setFocus(widget)
+  }
+
+  public blur(): void {
+    this.setFocus(undefined)
+  }
+
+  // ── lifecycle ─────────────────────────────────────────────────────────────
+
+  public start(): void {
+    if (this._running || this._closed) {
+      return
+    }
+    this._running = true
+    this.clock.start()
+    this.rafId = requestAnimationFrame(this.animate)
+  }
+
+  public stop(): void {
+    this._running = false
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = null
+    }
+  }
+
+  /**
+   * Tears the app down: stops the render loop, removes DOM/event listeners,
+   * disposes controllers, overlays, widgets and the renderer. Idempotent.
+   */
+  public close(): void {
+    if (this._closed) {
+      return
+    }
+    this._closed = true
+
+    this.stop()
+    window.removeEventListener('resize', this.handleResize)
+    window.removeEventListener('keydown', this.handleKeyDown)
+
+    this.pointerInteractionController.dispose()
+    this.cameraOrbitController?.dispose()
+    this.focusedWidgetBounds.dispose()
+    this.activeWindowBounds.dispose()
+    this.fpsOverlay.dispose()
+
+    for (const widget of [...this.widgetRegistry.topLevel]) {
+      widget.dispose()
+    }
+    this.widgetRegistry.clear(this.scene)
+
+    this.renderer.dispose()
+    this.renderer.domElement.remove()
+
+    this.emit('close', { type: 'close', app: this })
+    this.removeAllListeners()
+  }
+
+  /** Alias for {@link close}. */
+  public dispose(): void {
+    this.close()
+  }
+
+  // ── internals ─────────────────────────────────────────────────────────────
+
+  private _focusedWidget?: UIWidget
+  private _activeWindow?: UIWindow
+  private focusedSizeUnsubscribe?: () => void
+  private activeWindowSizeUnsubscribe?: () => void
+
+  private setFocus(widget?: UIWidget): void {
+    const focusChanged = this._focusedWidget !== widget
+    const nextWindow = this.findContainingWindow(widget)
+    const windowChanged = this._activeWindow !== nextWindow
+
+    if (focusChanged) {
+      const previous = this._focusedWidget
+      this._focusedWidget = widget
+      previous?.dispatchBlur()
+      widget?.dispatchFocus()
+
+      this.focusedSizeUnsubscribe?.()
+      this.focusedSizeUnsubscribe = widget?.on('sizechange', this.handleTrackedWidgetResize)
+    }
+
+    if (windowChanged) {
+      this._activeWindow = nextWindow
+
+      this.activeWindowSizeUnsubscribe?.()
+      this.activeWindowSizeUnsubscribe = nextWindow?.on('sizechange', this.handleTrackedWidgetResize)
+    }
+
+    if (focusChanged || windowChanged) {
+      this.refreshBoundsOverlays()
+    }
+
+    if (focusChanged) {
+      this.emit('focuschange', { type: 'focuschange', app: this, focused: widget })
+    }
+
+    if (windowChanged) {
+      this.emit('activewindowchange', { type: 'activewindowchange', app: this, activeWindow: nextWindow })
+    }
   }
 
   private readonly pickWidgetAtPointer = (): UIWidget | undefined => {
@@ -107,13 +324,27 @@ export class UIApp {
       while (object) {
         const widget = this.widgetRegistry.getWidget(object)
         if (widget) {
-          return widget
+          if (this.isInteractive(widget)) {
+            return widget
+          }
+          break
         }
         object = object.parent
       }
     }
 
     return undefined
+  }
+
+  private isInteractive(widget: UIWidget): boolean {
+    let current: UIWidget | undefined = widget
+    while (current) {
+      if (!current.enabled) {
+        return false
+      }
+      current = current.parent
+    }
+    return true
   }
 
   private isOverlayIntersection(object: THREE.Object3D): boolean {
@@ -131,11 +362,40 @@ export class UIApp {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.emit('resize', { type: 'resize', app: this })
   }
 
   private readonly handleWidgetInteraction = (widget: UIWidget | undefined): void => {
-    this.focusedWidget = widget
-    this.activeWindow = this.findContainingWindow(widget)
+    this.setFocus(widget)
+  }
+
+  private setDebug(value: boolean): void {
+    if (this._debug === value) {
+      return
+    }
+    this._debug = value
+    this.fpsOverlay.setVisible(value)
+    this.emit('debugchange', { type: 'debugchange', app: this, debug: value })
+  }
+
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== 'd' && event.key !== 'D') {
+      return
+    }
+
+    // Ignore the shortcut while the user is typing into a form field.
+    const target = event.target as HTMLElement | null
+    if (
+      target &&
+      (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))
+    ) {
+      return
+    }
+
+    this.toggleDebug()
+  }
+
+  private readonly handleTrackedWidgetResize = (): void => {
     this.refreshBoundsOverlays()
   }
 
@@ -161,9 +421,8 @@ export class UIApp {
   }
 
   private refreshBoundsOverlays(): void {
-    const focusedWidget = this.focusedWidget
-    const activeWindow = this.activeWindow
-
+    const focusedWidget = this._focusedWidget
+    const activeWindow = this._activeWindow
     if (focusedWidget) {
       this.focusedWidgetBounds.setBounds(focusedWidget.width, focusedWidget.height)
       this.focusedWidgetBounds.attachTo(focusedWidget)
@@ -180,7 +439,13 @@ export class UIApp {
   }
 
   private readonly animate = (): void => {
-    requestAnimationFrame(this.animate)
+    if (!this._running) {
+      return
+    }
+
+    this.rafId = requestAnimationFrame(this.animate)
+
+    const delta = this.clock.getDelta()
 
     for (const rootMesh of this.widgetRegistry.roots) {
       const rootWidget = this.widgetRegistry.getWidget(rootMesh)
@@ -191,10 +456,17 @@ export class UIApp {
       this.topLevelSphereProjector.apply(rootWidget, this.camera, this.sceneOrientation)
     }
 
-    for (const cb of this.updateCallbacks) {
-      cb(this.camera)
+    for (const root of this.widgetRegistry.topLevel) {
+      root.traverse((widget) => widget.update(delta))
     }
 
+    this.emit('update', { type: 'update', app: this, delta, camera: this.camera })
+    this.emit('beforerender', { type: 'beforerender', app: this, delta, camera: this.camera })
+
     this.renderer.render(this.scene, this.camera)
+
+    this.fpsOverlay.update(delta)
+
+    this.emit('afterrender', { type: 'afterrender', app: this, delta, camera: this.camera })
   }
 }

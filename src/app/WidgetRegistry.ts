@@ -37,6 +37,38 @@ export class WidgetRegistry {
     }
   }
 
+  public remove(widget: UIWidget, scene: THREE.Scene): void {
+    const index = this.widgets.indexOf(widget)
+    if (index < 0) {
+      return
+    }
+
+    this.widgets.splice(index, 1)
+    this.widgetRoots.delete(widget.mesh)
+
+    if (widget.mesh.parent === scene) {
+      scene.remove(widget.mesh)
+    }
+
+    this.rebuild()
+  }
+
+  public clear(scene: THREE.Scene): void {
+    for (const mesh of this.widgetRoots) {
+      if (mesh.parent === scene) {
+        scene.remove(mesh)
+      }
+    }
+
+    this.widgets.length = 0
+    this.widgetByMesh.clear()
+    this.widgetRoots.clear()
+  }
+
+  public get topLevel(): readonly UIWidget[] {
+    return this.widgets
+  }
+
   public get roots(): readonly THREE.Object3D[] {
     return Array.from(this.widgetRoots)
   }

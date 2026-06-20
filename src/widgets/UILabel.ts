@@ -34,10 +34,33 @@ export class UILabel extends UIWidget {
     this.buildLabelMesh()
   }
 
-  public override onClick(handler: (widget: UILabel) => void): void {
+  public override onClick(handler: (widget: UILabel) => void): this {
     super.onClick(() => {
       handler(this)
     })
+    return this
+  }
+
+  protected override onResize(): void {
+    this.disposeLabelResources()
+    this.buildLabelMesh()
+  }
+
+  protected override disposeResources(): void {
+    this.disposeLabelResources()
+  }
+
+  private disposeLabelResources(): void {
+    if (this.labelMesh) {
+      this.mesh.remove(this.labelMesh)
+      this.labelMesh.geometry.dispose()
+      this.labelMesh.material.dispose()
+      this.labelMesh = undefined
+    }
+    if (this.labelTexture) {
+      this.labelTexture.dispose()
+      this.labelTexture = undefined
+    }
   }
 
   // ── text ──────────────────────────────────────────────────────────────────

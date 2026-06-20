@@ -58,6 +58,12 @@ export class CornerBoundsOverlay {
     this.updateGeometry(width, height, padding, cornerRatio)
   }
 
+  public dispose(): void {
+    this.attachTo(undefined)
+    this.lineSegments.geometry.dispose()
+    ;(this.lineSegments.material as THREE.Material).dispose()
+  }
+
   private updateGeometry(width: number, height: number, padding: number, cornerRatio: number): void {
     const paddedWidth = Math.max(0.01, width + padding * 2)
     const paddedHeight = Math.max(0.01, height + padding * 2)

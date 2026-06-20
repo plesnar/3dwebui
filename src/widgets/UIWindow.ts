@@ -21,18 +21,33 @@ export class UIWindow extends UIWidget {
     this.rebuildDecorations()
   }
 
-  public override onClick(handler: (widget: UIWindow) => void): void {
+  public override onClick(handler: (widget: UIWindow) => void): this {
     super.onClick(() => {
       handler(this)
     })
+    return this
   }
 
   public override get canBeNested(): boolean {
     return false
   }
 
-  public override setPosition(x: number, y: number, z: number): this {
-    return super.setPosition(x, y, z)
+  protected override onResize(): void {
+    this.rebuildDecorations()
+  }
+
+  protected override disposeResources(): void {
+    this.clearBorders()
+    if (this.titleMesh) {
+      this.mesh.remove(this.titleMesh)
+      this.titleMesh.geometry.dispose()
+      this.titleMesh.material.dispose()
+      this.titleMesh = undefined
+    }
+    if (this.titleTexture) {
+      this.titleTexture.dispose()
+      this.titleTexture = undefined
+    }
   }
 
   public get borderSize(): number {

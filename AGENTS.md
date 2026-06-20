@@ -37,6 +37,7 @@ Run `npm run build` after meaningful changes.
 ## Source Structure
 
 - src/main.ts: app bootstrap and demo scene composition
+- src/core: framework-agnostic primitives (e.g. `EventEmitter`)
 - src/app: app-level orchestration and interaction plumbing
 - src/widgets: widget and window domain models
 - src/drag: drag contracts and drag controller implementations
@@ -47,6 +48,27 @@ Key app-layer classes:
 - `CameraOrbitController` — rotates `camera.quaternion` in place on empty-space drag, trackpad two-finger swipe (wheel events), and two-touch mobile gestures; disabled while a widget interaction is active
 - `TopLevelSphereProjector` — places top-level widgets on a sphere centered on the camera using an independent `sceneOrientation` quaternion (currently always identity)
 - `WidgetRegistry` — object-to-widget lookup
+
+## Event & Lifecycle Model
+
+- `UIWidget` and `UIApp` both extend the typed `EventEmitter` from `src/core`.
+  Use `on(type, listener)` (returns a disposer), `once`, `off`, `emit`.
+- Widget events: `click`, `pointerdown/up/enter/leave`, `focus`, `blur`,
+  `dragstart/move/end`, `childadded/removed`, `added/removed`, `visibilitychange`,
+  `enabledchange`, `sizechange`, `dispose`. `onClick` is sugar over `on('click')`.
+- App events: `widgetadded/removed`, `focuschange`, `activewindowchange`, `update`
+  (per-frame, carries `delta`), `beforerender/afterrender`, `resize`, `close`.
+- Event payloads are defined in `WidgetEventMap`/`AppEventMap` (declared as `type`
+  aliases so they satisfy the emitter's `Record<string, unknown>` constraint).
+- Lifecycle: `UIApp` exposes `start()`/`stop()` and `close()`/`dispose()`
+  (idempotent teardown of loop, listeners, controllers, overlays, widgets, renderer).
+  Widgets expose `update(delta)`, `handleAttached/handleDetached`, and overridable
+  `onAdded/onRemoved/onResize` hooks.
+- Disposal contract: `widget.dispose()` recursively disposes children, detaches from
+  its parent, frees geometry/material/textures, and clears listeners. Subclasses free
+  their own resources via the protected `disposeResources()` hook. `remove` detaches a
+  widget (reusable); `dispose` frees GPU resources. Resizable widgets rebuild
+  geometry-dependent decorations in the protected `onResize()` hook.
 
 ## Naming conventions
 

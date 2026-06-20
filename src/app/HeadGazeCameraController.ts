@@ -3,9 +3,9 @@ import type { EyeTrackingController } from './EyeTrackingController'
 import type { CameraOrbitController } from './CameraOrbitController'
 
 export interface HeadGazeCameraOptions {
-  /** How strongly head rotation maps to camera orbit angle (default 0.8). */
+  /** How strongly head rotation maps to camera orbit angle. */
   headSensitivity?: number
-  /** How strongly eye gaze maps to camera orbit angle (default 0.3, set 0 to disable). */
+  /** How strongly eye gaze maps to camera orbit angle (set 0 to disable). */
   gazeSensitivity?: number
 }
 

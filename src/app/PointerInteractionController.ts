@@ -12,6 +12,7 @@ export class PointerInteractionController {
   private activePointerId: number | null = null
   private pointerDownWidget: UIWidget | null = null
   private activeDragWidget: UIWidget | null = null
+  private hoveredWidget: UIWidget | null = null
   private readonly pointerDownPosition = new THREE.Vector2()
   private pointerMovedBeyondThreshold = false
 
@@ -82,6 +83,7 @@ export class PointerInteractionController {
     this.pointerDownWidget = this.pickWidgetAtPointer() ?? null
     this.onWidgetInteracted?.(this.pointerDownWidget ?? undefined)
     this.onCameraInteractionLockChange?.(this.pointerDownWidget !== null)
+    this.pointerDownWidget?.dispatchPointerDown(event)
 
     if (this.pointerDownWidget) {
       const controller = this.pointerDownWidget.getDragController()
@@ -90,24 +92,31 @@ export class PointerInteractionController {
       }
 
       this.raycaster.setFromCamera(this.pointer, this.camera)
-      const started = controller.onDragStart(this.pointerDownWidget, {
+      const startContext = {
         camera: this.camera,
         ray: this.raycaster.ray,
         pointerClientX: event.clientX,
         pointerClientY: event.clientY,
         sceneOrientation: this.getSceneOrientation?.() ?? new THREE.Quaternion(),
-      })
+      }
+      const started = controller.onDragStart(this.pointerDownWidget, startContext)
 
       if (!started) {
         return
       }
 
       this.activeDragWidget = this.pointerDownWidget
+      this.pointerDownWidget.dispatchDragStart(startContext)
       this.domElement.setPointerCapture(event.pointerId)
     }
   }
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (this.activePointerId === null) {
+      this.updateHover(event)
+      return
+    }
+
     if (this.activePointerId !== event.pointerId) {
       return
     }
@@ -137,12 +146,34 @@ export class PointerInteractionController {
     }
 
     this.raycaster.setFromCamera(this.pointer, this.camera)
-    controller.onDragMove(dragWidget, {
+    const moveContext = {
       ray: this.raycaster.ray,
       pointerClientX: event.clientX,
       pointerClientY: event.clientY,
       shiftKey: event.shiftKey,
-    })
+    }
+    controller.onDragMove(dragWidget, moveContext)
+    dragWidget.dispatchDragMove(moveContext)
+  }
+
+  private updateHover(event: PointerEvent): void {
+    this.updatePointerFromEvent(event)
+    const widget = this.pickWidgetAtPointer() ?? null
+    if (widget === this.hoveredWidget) {
+      return
+    }
+
+    this.hoveredWidget?.dispatchPointerLeave(event)
+    this.hoveredWidget = widget
+    widget?.dispatchPointerEnter(event)
+  }
+
+  private clearHover(event: PointerEvent): void {
+    if (!this.hoveredWidget) {
+      return
+    }
+    this.hoveredWidget.dispatchPointerLeave(event)
+    this.hoveredWidget = null
   }
 
   private handlePointerUp = (event: PointerEvent): void => {
@@ -159,12 +190,15 @@ export class PointerInteractionController {
     const dragWidget = this.activeDragWidget
     if (dragWidget) {
       dragWidget.getDragController()?.onDragEnd(dragWidget)
+      dragWidget.dispatchDragEnd()
     }
+
+    this.pointerDownWidget?.dispatchPointerUp(event)
 
     if (!this.pointerMovedBeyondThreshold && this.pointerDownWidget) {
       const releasedWidget = this.pickWidgetAtPointer()
       if (releasedWidget === this.pointerDownWidget) {
-        this.pointerDownWidget.triggerClick()
+        this.pointerDownWidget.dispatchClick(event)
       }
     }
 
@@ -172,6 +206,8 @@ export class PointerInteractionController {
   }
 
   private handlePointerCancel = (event: PointerEvent): void => {
+    this.clearHover(event)
+
     if (this.activePointerId !== event.pointerId) {
       return
     }
@@ -183,6 +219,7 @@ export class PointerInteractionController {
     const dragWidget = this.activeDragWidget
     if (dragWidget) {
       dragWidget.getDragController()?.onDragEnd(dragWidget)
+      dragWidget.dispatchDragEnd()
     }
 
     this.resetInteractionState()
