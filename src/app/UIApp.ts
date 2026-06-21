@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { CameraOrbitController } from './CameraOrbitController'
 import { CornerBoundsOverlay } from './CornerBoundsOverlay'
+import { DebugInfoOverlay } from './DebugInfoOverlay'
 import { FpsOverlay } from './FpsOverlay'
 import { TopLevelSphereProjector } from './TopLevelSphereProjector'
 import { PointerInteractionController } from './PointerInteractionController'
@@ -39,11 +40,12 @@ export class UIApp extends EventEmitter<AppEventMap> {
   })
   private readonly fpsOverlay: FpsOverlay
   private readonly trackingStatusOverlay: TrackingStatusOverlay
+  private readonly debugInfoOverlay: DebugInfoOverlay
   private rafId: number | null = null
   private _running = false
   private _closed = false
   private _debug = false
-  private _trackingEnabled = true
+  private _trackingEnabled = false
 
   public get sceneRoot(): THREE.Scene {
     return this.scene
@@ -124,8 +126,10 @@ export class UIApp extends EventEmitter<AppEventMap> {
 
     this.fpsOverlay = new FpsOverlay(container)
     this.trackingStatusOverlay = new TrackingStatusOverlay(container)
-    this._trackingEnabled = options.enableTracking ?? true
+    this.debugInfoOverlay = new DebugInfoOverlay(container)
+    this._trackingEnabled = options.enableTracking ?? false
     this.trackingStatusOverlay.setEnabled(this._trackingEnabled)
+    this.refreshDebugInfoOverlay()
 
     if (options.enableCameraOrbit ?? true) {
       this.cameraOrbitController = new CameraOrbitController(
@@ -265,6 +269,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.activeWindowBounds.dispose()
     this.fpsOverlay.dispose()
     this.trackingStatusOverlay.dispose()
+    this.debugInfoOverlay.dispose()
 
     for (const widget of [...this.widgetRegistry.topLevel]) {
       widget.dispose()
@@ -314,6 +319,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
 
     if (focusChanged || windowChanged) {
       this.refreshBoundsOverlays()
+      this.refreshDebugInfoOverlay()
     }
 
     if (focusChanged) {
@@ -382,6 +388,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.refreshDebugInfoOverlay()
     this.emit('resize', { type: 'resize', app: this })
   }
 
@@ -396,6 +403,8 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this._debug = value
     this.fpsOverlay.setVisible(value)
     this.trackingStatusOverlay.setVisible(value)
+    this.debugInfoOverlay.setVisible(value)
+    this.refreshDebugInfoOverlay()
     this.emit('debugchange', { type: 'debugchange', app: this, debug: value })
   }
 
@@ -432,6 +441,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
 
   private readonly handleTrackedWidgetResize = (): void => {
     this.refreshBoundsOverlays()
+    this.refreshDebugInfoOverlay()
   }
 
   private findContainingWindow(widget: UIWidget | undefined): UIWindow | undefined {
@@ -471,6 +481,10 @@ export class UIApp extends EventEmitter<AppEventMap> {
     } else {
       this.activeWindowBounds.attachTo(undefined)
     }
+  }
+
+  private refreshDebugInfoOverlay(): void {
+    this.debugInfoOverlay.setData(this._focusedWidget)
   }
 
   private readonly animate = (): void => {

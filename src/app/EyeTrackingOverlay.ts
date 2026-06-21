@@ -43,7 +43,7 @@ export class EyeTrackingOverlay {
   private overlayWidth: number
   private overlayHeight: number
 
-  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, controller: EyeTrackingController, overlayWidth = 1.5) {
+  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, controller: EyeTrackingController, overlayWidth = 1) {
     this.controller = controller
     this.overlayWidth = overlayWidth
     this.overlayHeight = overlayWidth * (3 / 4)

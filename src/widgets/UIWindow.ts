@@ -5,6 +5,9 @@ import { UIRectButton } from './UIRectButton'
 import type { UIWindowOptions } from './WindowOptions'
 
 export class UIWindow extends UIWidget {
+
+  private static readonly titleBarHeight = 0.4
+
   private _borderSize: number
   private _borderColor: number
   private _title: string
@@ -92,8 +95,7 @@ export class UIWindow extends UIWidget {
   }
 
   private createBorders(): void {
-    const thickness = Math.min(this._borderSize, this.width / 2, this.height / 2)
-    if (thickness <= 0) {
+    if (this._borderSize <= 0) {
       return
     }
 
@@ -106,24 +108,24 @@ export class UIWindow extends UIWidget {
         new THREE.PlaneGeometry(width, height),
         new THREE.MeshBasicMaterial({ color: this._borderColor, side: THREE.DoubleSide }),
       )
-      strip.position.set(x, y, 0.001)
+      strip.position.set(x, y, 0.0)
       strip.userData['uiOverlay'] = true
       this.mesh.add(strip)
       this.borderMeshes.push(strip)
     }
 
-    const topY = this.height / 2 - thickness / 2
-    const bottomY = -this.height / 2 + thickness / 2
-    const leftX = -this.width / 2 + thickness / 2
-    const rightX = this.width / 2 - thickness / 2
+    const topY = this.height / 2 - this._borderSize / 2
+    const bottomY = -this.height / 2 + this._borderSize / 2
+    const leftX = -this.width / 2 + this._borderSize / 2
+    const rightX = this.width / 2 - this._borderSize / 2
 
-    makeBorderStrip(this.width, thickness, 0, topY)
-    makeBorderStrip(this.width, thickness, 0, bottomY)
-    makeBorderStrip(thickness, this.height - 2 * thickness, leftX, 0)
-    makeBorderStrip(thickness, this.height - 2 * thickness, rightX, 0)
+    makeBorderStrip(this.width, this._borderSize, 0, topY)
+    makeBorderStrip(this.width, this._borderSize, 0, bottomY)
+    makeBorderStrip(this._borderSize, this.height - 2 * this._borderSize, leftX, 0)
+    makeBorderStrip(this._borderSize, this.height - 2 * this._borderSize, rightX, 0)
 
-    const titleBarHeight = this.getTitleBarHeight(thickness)
-    makeBorderStrip(this.width - 2 * thickness, thickness, 0, this.height / 2 - titleBarHeight)
+    const titleBarBorderY = this.height / 2 - UIWindow.titleBarHeight + this._borderSize / 2
+    makeBorderStrip(this.width - 2 * this._borderSize, this._borderSize, 0, titleBarBorderY)
   }
 
   private updateBorderColor(): void {
@@ -171,38 +173,34 @@ export class UIWindow extends UIWidget {
   }
 
   private layoutHeaderWidgets(): void {
-    const thickness = Math.min(this._borderSize, this.width / 2, this.height / 2)
-    const titleBarHeight = this.getTitleBarHeight(thickness)
-
-    const contentTop = this.height / 2 - thickness
-    const contentBottom = this.height / 2 - titleBarHeight + thickness / 2
-    const contentHeight = Math.max(0.08, contentTop - contentBottom)
-
-    const horizontalPadding = Math.max(0.04, thickness * 1.2)
-    const closeSize = Math.min(Math.max(0.12, contentHeight * 0.72), Math.max(0.12, this.width * 0.28))
+    const contentTop = this.height / 2 
+    const contentBottom = this.height / 2 - UIWindow.titleBarHeight + this._borderSize
+    const contentHeight = contentTop - contentBottom;
+    const padding = 0.04;
+    const closeSize = contentHeight - padding * 2;
     const closeX = THREE.MathUtils.clamp(
-      this.width / 2 - thickness - horizontalPadding - closeSize / 2,
+      this.width / 2 - this._borderSize - padding - closeSize / 2,
       -this.width / 2 + closeSize / 2,
       this.width / 2 - closeSize / 2,
     )
     const centerY = (contentTop + contentBottom) / 2
 
-    const titleLeft = -this.width / 2 + thickness + horizontalPadding
-    const titleRight = closeX - closeSize / 2 - horizontalPadding
+    // Inner bounds of the title bar: inside the top border, above the
+    // title-bar separator border, and right of the left border.
+    const titleTop = this.height / 2 - this._borderSize
+    const titleBottom = this.height / 2 - UIWindow.titleBarHeight + this._borderSize
+    const titleBarInnerHeight = titleTop - titleBottom
+    const titleLeft = -this.width / 2 + this._borderSize
+    const titleRight = closeX - closeSize / 2 - padding
     const titleWidth = Math.max(0.08, titleRight - titleLeft)
-    const titleHeight = Math.max(0.06, contentHeight - 0.02)
-    const titleVerticalOffset = Math.min(0.01, contentHeight * 0.12)
+    const titleHeight = Math.max(0.06, titleBarInnerHeight)
+    const titleCenterY = (titleTop + titleBottom) / 2
 
     this.titleLabel.setSize(titleWidth, titleHeight)
-    this.titleLabel.setPosition(titleLeft + titleWidth / 2, centerY - titleVerticalOffset, 0.002)
+    this.titleLabel.setPosition(titleLeft + titleWidth / 2, titleCenterY, 0.00)
 
     this.closeButton.setSize(closeSize, closeSize)
-    this.closeButton.setPosition(closeX, centerY, 0.003)
+    this.closeButton.setPosition(closeX, centerY, 0)
   }
 
-  private getTitleBarHeight(borderThickness: number): number {
-    const minimum = Math.max(borderThickness * 3, 0.2)
-    const target = this.height * 0.24
-    return Math.min(this.height * 0.45, Math.max(minimum, target))
-  }
 }

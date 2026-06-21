@@ -184,7 +184,22 @@ export class UILabel extends UIWidget {
 
     const raw = this._text.length > 0 ? this._text : ' '
     const displayText = this.ellipsizeText(context, raw, maxTextWidth)
-    context.fillText(displayText, xMap[this._textAlign], yMap[this._verticalAlign])
+
+    const x = xMap[this._textAlign]
+    let y = yMap[this._verticalAlign]
+
+    // The canvas 'middle' baseline centres on the em box rather than the
+    // glyphs' visual centre, which makes text appear slightly too high.
+    // Re-centre using the actual rendered bounding box.
+    if (this._verticalAlign === 'middle') {
+      context.textBaseline = 'alphabetic'
+      const metrics = context.measureText(displayText)
+      const ascent = metrics.actualBoundingBoxAscent
+      const descent = metrics.actualBoundingBoxDescent
+      y = canvas.height / 2 + (ascent - descent) / 2
+    }
+
+    context.fillText(displayText, x, y)
 
     this.labelTexture.needsUpdate = true
   }
