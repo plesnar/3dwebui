@@ -118,19 +118,28 @@ function buildInteractiveTiles(app: UIApp, sphereDrag: SphereDragController): vo
 }
 
 // ── dashboard window ─────────────────────────────────────────────────────────
-// A window with a border and title that nests a label and two buttons. The
-// nested widgets are dragged within the window plane.
+// A 3D beveled window with a raised, beveled title bar that nests a label and a
+// button. The nested widgets sit on the window's front face and are dragged
+// within the window plane.
 function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): void {
   const window = new UIWindow({
     name: 'dashboard',
     title: 'Dashboard',
     width: 3.0,
     height: 1.8,
-    borderSize: 0.012,
-    borderColor: 0x93c5fd,
+    thickness: 0.18,
+    cornerRadius: 0.12,
+    color: 0x1f2937,
+    titleBarColor: 0x1f2937,
+    titleBarHeight: 0.36,
+    titleBarMargin: 0.06,
+    titleBarElevation: -0.03,
     position: [0, 0, 0],
   })
   window.setDragController(sphereDrag)
+
+  // Front face of the window body, where nested content rests.
+  const surfaceZ = window.depth + 0.01
 
   // Toggle the window between two sizes when its background is clicked.
   let expanded = false
@@ -147,7 +156,7 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
     textColor: 0xe2e8f0,
     width: 1.6,
     height: 0.3,
-    position: [0, 0.3, 0.06],
+    position: [0, 0.3, surfaceZ],
   })
   window.addWidget(heading)
 
@@ -159,7 +168,7 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
     textColor: 0x38bdf8,
     width: 1.4,
     height: 0.32,
-    position: [-0.7, -0.1, 0.06],
+    position: [-0.7, -0.1, surfaceZ],
   })
   counterLabel.setDragController(new PlaneDragController())
   window.addWidget(counterLabel)
@@ -173,7 +182,7 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
     cornerRadius: 0.1,
     color: 0x2563eb,
     textColor: 0xffffff,
-    position: [0.6, -0.1, 0.06],
+    position: [0.6, -0.1, surfaceZ],
   })
   incButton.setDragController(new PlaneDragController())
   incButton.onClick(() => {

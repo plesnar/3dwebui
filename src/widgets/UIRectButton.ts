@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { UIButton } from './UIButton'
+import { createRoundedRectShape } from './RoundedRectShape'
 import type { UIRectButtonOptions } from './UIRectButtonOptions'
 
 /**
@@ -49,7 +50,7 @@ export class UIRectButton extends UIButton {
     const shapeHeight = height - 2 * inset
     const shapeRadius = Math.max(0, cornerRadius - inset)
 
-    const shape = UIRectButton.createRoundedRectShape(shapeWidth, shapeHeight, shapeRadius)
+    const shape = createRoundedRectShape(shapeWidth, shapeHeight, shapeRadius)
 
     const geometry = new THREE.ExtrudeGeometry(shape, {
       depth: thickness,
@@ -110,23 +111,5 @@ export class UIRectButton extends UIButton {
   public set bevelSegments(value: number) {
     this._bevelSegments = Math.max(1, Math.floor(value))
     this.rebuildButtonGeometry()
-  }
-
-  private static createRoundedRectShape(width: number, height: number, radius: number): THREE.Shape {
-    const halfWidth = width / 2
-    const halfHeight = height / 2
-    const r = Math.min(Math.max(0, radius), halfWidth, halfHeight)
-
-    const shape = new THREE.Shape()
-    shape.moveTo(-halfWidth + r, -halfHeight)
-    shape.lineTo(halfWidth - r, -halfHeight)
-    shape.quadraticCurveTo(halfWidth, -halfHeight, halfWidth, -halfHeight + r)
-    shape.lineTo(halfWidth, halfHeight - r)
-    shape.quadraticCurveTo(halfWidth, halfHeight, halfWidth - r, halfHeight)
-    shape.lineTo(-halfWidth + r, halfHeight)
-    shape.quadraticCurveTo(-halfWidth, halfHeight, -halfWidth, halfHeight - r)
-    shape.lineTo(-halfWidth, -halfHeight + r)
-    shape.quadraticCurveTo(-halfWidth, -halfHeight, -halfWidth + r, -halfHeight)
-    return shape
   }
 }

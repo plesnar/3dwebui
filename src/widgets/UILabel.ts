@@ -155,7 +155,7 @@ export class UILabel extends UIWidget {
       return
     }
 
-    const paddingPx = 16
+    const paddingPx = Math.min(16, Math.floor(Math.min(canvas.width, canvas.height) * 0.2))
     const maxTextWidth = Math.max(0, canvas.width - paddingPx * 2)
 
     const xMap: Record<UILabelTextAlign, number> = {

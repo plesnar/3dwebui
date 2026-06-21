@@ -37,7 +37,7 @@ export class TrackingStatusOverlay {
 
   /** Updates the readout to reflect whether head/eye tracking is enabled. */
   setEnabled(enabled: boolean): void {
-    this.element.textContent = enabled ? 'Tracking: ON' : 'Tracking: OFF'
+    this.element.textContent = enabled ? 'Tracking: ON [press H]' : 'Tracking: OFF [press H]'
     this.element.style.color = enabled ? '#7dff8a' : '#f87171'
   }
 
