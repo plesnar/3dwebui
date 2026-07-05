@@ -150,7 +150,6 @@ export class PointerInteractionController {
       ray: this.raycaster.ray,
       pointerClientX: event.clientX,
       pointerClientY: event.clientY,
-      shiftKey: event.shiftKey,
     }
     controller.onDragMove(dragWidget, moveContext)
     dragWidget.dispatchDragMove(moveContext)

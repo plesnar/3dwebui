@@ -3,7 +3,7 @@ import { EventEmitter } from '../core/EventEmitter'
 import type { UIDragController } from '../drag/UIDragController'
 import type { DragMoveContext } from '../drag/DragMoveContext'
 import type { DragStartContext } from '../drag/DragStartContext'
-import type { Vector3Like, WidgetOptions } from './WidgetOptions'
+import type { UIWidgetOptions, Vector3Like } from './UIWidgetOptions'
 import type { WidgetEventMap } from './WidgetEventMap'
 
 let nextWidgetId = 0
@@ -54,7 +54,7 @@ export class UIWidget extends EventEmitter<WidgetEventMap> {
   private _parent?: UIWidget
   private readonly childWidgets: UIWidget[] = []
 
-  constructor(options: WidgetOptions = {}) {
+  constructor(options: UIWidgetOptions = {}) {
     super()
 
     const hasBackgroundColor = options.backgroundColor !== undefined

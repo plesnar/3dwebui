@@ -1,9 +1,9 @@
-import type { WidgetOptions } from './WidgetOptions'
+import type { UIWidgetOptions } from './UIWidgetOptions'
 
 export type UILabelTextAlign = 'left' | 'center' | 'right'
 export type UILabelVerticalAlign = 'top' | 'middle' | 'bottom'
 
-export type UILabelOptions = WidgetOptions & {
+export type UILabelOptions = UIWidgetOptions & {
   text?: string
   font?: string
   textColor?: number

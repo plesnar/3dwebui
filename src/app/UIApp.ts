@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
 import { CameraOrbitController } from './CameraOrbitController'
 import { CornerBoundsOverlay } from './CornerBoundsOverlay'
 import { DebugInfoOverlay } from './DebugInfoOverlay'
@@ -10,7 +11,7 @@ import { WidgetRegistry } from './WidgetRegistry'
 import { EventEmitter } from '../core/EventEmitter'
 import type { AppEventMap } from './AppEventMap'
 import type { UIAppOptions } from './UIAppOptions'
-import type { UIWidget } from '../widgets/UIWidget'
+import { UIWidget } from '../widgets/UIWidget'
 import { UIWindow } from '../widgets/UIWindow'
 
 export class UIApp extends EventEmitter<AppEventMap> {
@@ -41,6 +42,8 @@ export class UIApp extends EventEmitter<AppEventMap> {
   private readonly fpsOverlay: FpsOverlay
   private readonly trackingStatusOverlay: TrackingStatusOverlay
   private readonly debugInfoOverlay: DebugInfoOverlay
+  private backgroundTexture: THREE.Texture | null = null
+  private environmentTexture: THREE.Texture | null = null
   private rafId: number | null = null
   private _running = false
   private _closed = false
@@ -118,7 +121,16 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.renderer = new THREE.WebGLRenderer({ antialias: options.antialias ?? true })
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio)
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = options.toneMappingExposure ?? 1
     container.appendChild(this.renderer.domElement)
+
+    if (options.backgroundImage) {
+      void this.loadEnvironment(
+        options.backgroundImage,
+        options.backgroundImageAsEnvironment ?? true,
+      )
+    }
 
     this.raycaster = new THREE.Raycaster()
     window.addEventListener('resize', this.handleResize)
@@ -135,6 +147,8 @@ export class UIApp extends EventEmitter<AppEventMap> {
       this.cameraOrbitController = new CameraOrbitController(
         this.renderer.domElement,
         (orientation) => this.camera.quaternion.copy(orientation),
+        this.isFocusedWidgetPinchTarget,
+        this.applyFocusedWidgetDepth,
       )
     }
 
@@ -156,7 +170,38 @@ export class UIApp extends EventEmitter<AppEventMap> {
       this.start()
     }
   }
+  // ── background / environment ───────────────────────────────────────
 
+  /**
+   * Loads an equirectangular image and applies it as the scene background,
+   * optionally deriving a PMREM environment map for realistic reflections.
+   * The solid {@link UIAppOptions.backgroundColor} remains visible until the
+   * image finishes loading. Safe to ignore failures — the colour stays.
+   */
+  private async loadEnvironment(url: string, asEnvironment: boolean): Promise<void> {
+    try {
+      const texture = await new EXRLoader().loadAsync(url)
+      if (this._closed) {
+        texture.dispose()
+        return
+      }
+
+      texture.mapping = THREE.EquirectangularReflectionMapping
+      this.backgroundTexture = texture
+      this.scene.background = texture
+
+      if (asEnvironment) {
+        const pmrem = new THREE.PMREMGenerator(this.renderer)
+        pmrem.compileEquirectangularShader()
+        const envTarget = pmrem.fromEquirectangular(texture)
+        this.environmentTexture = envTarget.texture
+        this.scene.environment = envTarget.texture
+        pmrem.dispose()
+      }
+    } catch (error) {
+      console.error(`[UIApp] Failed to load background image "${url}":`, error)
+    }
+  }
   // ── collection ────────────────────────────────────────────────────────────
 
   public add(widget: UIWidget): this {
@@ -276,6 +321,13 @@ export class UIApp extends EventEmitter<AppEventMap> {
     }
     this.widgetRegistry.clear(this.scene)
 
+    this.scene.background = null
+    this.scene.environment = null
+    this.backgroundTexture?.dispose()
+    this.backgroundTexture = null
+    this.environmentTexture?.dispose()
+    this.environmentTexture = null
+
     this.renderer.dispose()
     this.renderer.domElement.remove()
 
@@ -394,6 +446,25 @@ export class UIApp extends EventEmitter<AppEventMap> {
 
   private readonly handleWidgetInteraction = (widget: UIWidget | undefined): void => {
     this.setFocus(widget)
+  }
+
+  /** True when the focused widget is a top-level widget that pinch-zoom can move in depth. */
+  private readonly isFocusedWidgetPinchTarget = (): boolean => {
+    return this._focusedWidget?.getTopLevelInApp() === true
+  }
+
+  /** Moves the focused top-level widget toward/away from the camera by adjusting its depth. */
+  private readonly applyFocusedWidgetDepth = (delta: number): void => {
+    const widget = this._focusedWidget
+    if (!widget || !widget.getTopLevelInApp()) {
+      return
+    }
+
+    const position = widget.getPosition()
+    const minZ = UIWidget.TOP_LEVEL_MIN_RADIUS - UIWidget.TOP_LEVEL_BASE_RADIUS
+    const maxZ = UIWidget.TOP_LEVEL_MAX_RADIUS - UIWidget.TOP_LEVEL_BASE_RADIUS
+    const z = THREE.MathUtils.clamp(position.z + delta, minZ, maxZ)
+    widget.setPosition(position.x, position.y, z)
   }
 
   private setDebug(value: boolean): void {

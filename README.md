@@ -77,9 +77,9 @@ src/
     UILabel.ts
     UIButton.ts                # Abstract procedural 3D button base
     UIRectButton.ts            # Rectangular extruded + beveled button
-    WidgetOptions.ts
+    UIWidgetOptions.ts
     WidgetEventMap.ts          # Widget event payload types
-    WindowOptions.ts
+    UIWindowOptions.ts
     UILabelOptions.ts
     UIButtonOptions.ts
     UIRectButtonOptions.ts

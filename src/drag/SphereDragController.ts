@@ -5,8 +5,6 @@ import type { UIDragController } from './UIDragController'
 import { UIWidget } from '../widgets/UIWidget'
 
 export class SphereDragController implements UIDragController {
-  private static readonly RADIUS_PIXELS_TO_UNITS = 0.01
-
   private readonly sphere = new THREE.Sphere()
   private readonly hitPoint = new THREE.Vector3()
   private readonly cameraWorldPosition = new THREE.Vector3()
@@ -17,7 +15,6 @@ export class SphereDragController implements UIDragController {
 
   private activeWidget: UIWidget | null = null
   private activeRadius = UIWidget.TOP_LEVEL_BASE_RADIUS
-  private lastPointerClientY = 0
   private initialYaw = 0
   private initialPitch = 0
   private initialLogicalX = 0
@@ -37,7 +34,6 @@ export class SphereDragController implements UIDragController {
     this.cachedSceneOrientation.copy(context.sceneOrientation)
     this.sphere.center.copy(this.cameraWorldPosition)
     this.sphere.radius = this.activeRadius
-    this.lastPointerClientY = context.pointerClientY
 
     if (!context.ray.intersectSphere(this.sphere, this.hitPoint)) {
       return false
@@ -57,17 +53,6 @@ export class SphereDragController implements UIDragController {
   public onDragMove(widget: UIWidget, context: DragMoveContext): void {
     if (this.activeWidget !== widget) {
       return
-    }
-
-    const dy = context.pointerClientY - this.lastPointerClientY
-    this.lastPointerClientY = context.pointerClientY
-
-    if (context.shiftKey) {
-      this.activeRadius = THREE.MathUtils.clamp(
-        this.activeRadius + dy * SphereDragController.RADIUS_PIXELS_TO_UNITS,
-        UIWidget.TOP_LEVEL_MIN_RADIUS,
-        UIWidget.TOP_LEVEL_MAX_RADIUS,
-      )
     }
 
     this.sphere.radius = this.activeRadius
@@ -105,7 +90,6 @@ export class SphereDragController implements UIDragController {
   public onDragEnd(widget: UIWidget): void {
     if (this.activeWidget === widget) {
       this.activeWidget = null
-      this.lastPointerClientY = 0
     }
   }
 }

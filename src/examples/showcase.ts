@@ -27,6 +27,7 @@ import { HeadGazeCameraController } from '../app/HeadGazeCameraController'
 export function createShowcaseApp(): UIApp {
   const app = new UIApp({
     backgroundColor: 0x0f172a,
+    backgroundImage: '/textures/tree_lined_driveway_2k.exr',
     camera: { position: { x: 0, y: 0, z: 5 } },
     debug: true,
   })

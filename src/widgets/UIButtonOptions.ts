@@ -1,13 +1,13 @@
-import type { WidgetOptions } from './WidgetOptions'
+import type { UIWidgetOptions } from './UIWidgetOptions'
 
 /**
  * Shared options for procedural 3D button widgets.
  *
- * `width`/`height` (inherited from {@link WidgetOptions}) define the button's
+ * `width`/`height` (inherited from {@link UIWidgetOptions}) define the button's
  * face dimensions on the X/Y plane. `thickness` is the extruded "button height"
  * along Z, which is reduced while the button is pressed.
  */
-export type UIButtonOptions = WidgetOptions & {
+export type UIButtonOptions = UIWidgetOptions & {
   /** Extruded button height along Z in world units. Defaults to 0.25. */
   thickness?: number
   /**

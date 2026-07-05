@@ -1,26 +1,40 @@
 import * as THREE from 'three'
 
 type OrientationChangeHandler = (orientation: THREE.Quaternion) => void
+type PinchActivePredicate = () => boolean
+type PinchZoomHandler = (delta: number) => void
 
 export class CameraOrbitController {
   private static readonly DRAG_SENSITIVITY = 0.005
   private static readonly WHEEL_SENSITIVITY = 0.002
+  private static readonly PINCH_WHEEL_SENSITIVITY = 0.01
+  private static readonly PINCH_TOUCH_SENSITIVITY = 0.01
 
   private yaw = 0
   private pitch = 0
   private headYawOffset = 0
   private headPitchOffset = 0
   private isBlocked = false
+  private pinchDistance: number | null = null
 
   private readonly activePointers = new Map<number, { x: number; y: number }>()
   private readonly orientation = new THREE.Quaternion()
 
   private readonly domElement: HTMLElement
   private readonly onOrientationChange: OrientationChangeHandler
+  private readonly isPinchActive?: PinchActivePredicate
+  private readonly onPinchZoom?: PinchZoomHandler
 
-  constructor(domElement: HTMLElement, onOrientationChange: OrientationChangeHandler) {
+  constructor(
+    domElement: HTMLElement,
+    onOrientationChange: OrientationChangeHandler,
+    isPinchActive?: PinchActivePredicate,
+    onPinchZoom?: PinchZoomHandler,
+  ) {
     this.domElement = domElement
     this.onOrientationChange = onOrientationChange
+    this.isPinchActive = isPinchActive
+    this.onPinchZoom = onPinchZoom
 
     this.domElement.style.touchAction = 'none'
     this.domElement.addEventListener('pointerdown', this.handlePointerDown)
@@ -39,6 +53,7 @@ export class CameraOrbitController {
         }
       }
       this.activePointers.clear()
+      this.pinchDistance = null
     }
   }
 
@@ -63,6 +78,9 @@ export class CameraOrbitController {
     }
     this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
     this.domElement.setPointerCapture(event.pointerId)
+
+    // Once two fingers are down, seed the pinch distance for touch zoom.
+    this.pinchDistance = this.activePointers.size === 2 ? this.measurePointerDistance() : null
   }
 
   private handlePointerMove = (event: PointerEvent): void => {
@@ -75,9 +93,32 @@ export class CameraOrbitController {
     const dy = event.clientY - prev.y
     this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
+    // With two fingers, a change in finger distance zooms the focused widget
+    // instead of rotating the camera.
+    if (this.activePointers.size === 2) {
+      const distance = this.measurePointerDistance()
+      const previousDistance = this.pinchDistance
+      this.pinchDistance = distance
+
+      if (previousDistance !== null && this.isPinchActive?.()) {
+        // Spreading fingers (zoom in) brings the widget closer (negative delta).
+        const delta = (previousDistance - distance) * CameraOrbitController.PINCH_TOUCH_SENSITIVITY
+        this.onPinchZoom?.(delta)
+        return
+      }
+    }
+
     // With two fingers, each contributes half so total speed stays consistent
     const scale = this.activePointers.size === 2 ? 0.5 : 1
     this.applyDelta(dx * scale, dy * scale)
+  }
+
+  private measurePointerDistance(): number {
+    const points = Array.from(this.activePointers.values())
+    if (points.length < 2) {
+      return 0
+    }
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
   }
 
   private handlePointerUp = (event: PointerEvent): void => {
@@ -88,6 +129,7 @@ export class CameraOrbitController {
       this.domElement.releasePointerCapture(event.pointerId)
     }
     this.activePointers.delete(event.pointerId)
+    this.pinchDistance = null
   }
 
   private handlePointerCancel = (event: PointerEvent): void => {
@@ -98,6 +140,7 @@ export class CameraOrbitController {
       this.domElement.releasePointerCapture(event.pointerId)
     }
     this.activePointers.delete(event.pointerId)
+    this.pinchDistance = null
   }
 
   private handleWheel = (event: WheelEvent): void => {
@@ -105,6 +148,15 @@ export class CameraOrbitController {
     if (this.isBlocked) {
       return
     }
+
+    // Trackpad pinch arrives as a ctrl-modified wheel event; route it to widget
+    // depth zoom when a widget is the active pinch target.
+    if (event.ctrlKey && this.isPinchActive?.()) {
+      // Pinch out (zoom in) reports a negative deltaY, moving the widget closer.
+      this.onPinchZoom?.(event.deltaY * CameraOrbitController.PINCH_WHEEL_SENSITIVITY)
+      return
+    }
+
     this.yaw -= event.deltaX * CameraOrbitController.WHEEL_SENSITIVITY
     this.pitch -= event.deltaY * CameraOrbitController.WHEEL_SENSITIVITY
     this.pitch = THREE.MathUtils.clamp(this.pitch, -Math.PI / 2, Math.PI / 2)

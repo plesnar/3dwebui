@@ -4,7 +4,7 @@ import { UIWidget } from './UIWidget'
 import { UILabel } from './UILabel'
 import { UIRectButton } from './UIRectButton'
 import { createRoundedRectShape, type CornerRadii } from './RoundedRectShape'
-import type { UIWindowOptions } from './WindowOptions'
+import type { UIWindowOptions } from './UIWindowOptions'
 
 /**
  * A top-level window rendered as a single 3D extruded, rounded-beveled box.
