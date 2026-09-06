@@ -6,6 +6,7 @@ import { UILabel } from '../widgets/UILabel'
 import { UISciFiButton } from '../widgets/UISciFiButton'
 import { UISciFiWindow } from '../widgets/UISciFiWindow'
 import { UIWidget } from '../widgets/UIWidget'
+import { SciFiSounds } from './SciFiSounds'
 import { StarfieldBackground } from './StarfieldBackground'
 import { setupHeadGazeTracking } from './setupHeadGazeTracking'
 
@@ -20,6 +21,8 @@ const font = '500 30px "Menlo", "Consolas", monospace'
 
 export function createSciFiShowcaseApp(): UIApp {
   const app = new UIApp({ backgroundColor: 0x050809, camera: { fov: 64 } })
+  const sounds = new SciFiSounds()
+  app.once('close', () => sounds.dispose())
   new StarfieldBackground(app)
   const ambient = new THREE.AmbientLight(0xdce9e5, 1.4)
   const key = new THREE.DirectionalLight(0xffe4b8, 2)
@@ -34,10 +37,23 @@ export function createSciFiShowcaseApp(): UIApp {
   const state = { power: 72, paused: false }
 
   buildNavigation(navigation)
-  buildSensors(app, sensors, state)
+  buildSensors(app, sensors, state, sounds)
   const restoreLayout = fitStations(app, [navigation, sensors, systems])
   buildSystems(app, systems, state, restoreLayout)
   setupHeadGazeTracking(app)
+  app.traverse((widget) => {
+    if (!(widget instanceof UISciFiButton || widget instanceof UISciFiWindow)) return
+    if (widget instanceof UISciFiButton) {
+      widget.on('pointerenter', () => sounds.playHover())
+    }
+    if (widget.name === 'power-increase') {
+      widget.on('click', () => sounds.playClick('select1'))
+    } else if (widget.name === 'power-decrease') {
+      widget.on('click', () => sounds.playClick('select2'))
+    } else {
+      widget.on('click', () => sounds.playClick())
+    }
+  })
 
   return app
 }
@@ -186,7 +202,12 @@ function buildNavigation(station: UISciFiWindow): void {
   updateTarget()
 }
 
-function buildSensors(app: UIApp, station: UISciFiWindow, state: { power: number; paused: boolean }): void {
+function buildSensors(
+  app: UIApp,
+  station: UISciFiWindow,
+  state: { power: number; paused: boolean },
+  sounds: SciFiSounds,
+): void {
   const status = addLabel(station, 'sensor-status', 'DEEP SPACE / STANDBY', 0, 1.08, 2.85, palette.cyan)
   addScope(station, palette.cyan)
   const sweep = addLines(station, [0, 0, 0, 0.75, 0, 0], palette.cyan, 0.9)
@@ -215,9 +236,11 @@ function buildSensors(app: UIApp, station: UISciFiWindow, state: { power: number
     scan.text = 'Scanning'
     scan.enabled = false
     reset.enabled = true
+    sounds.setRadarActive(!state.paused)
   })
   reset.onClick(() => {
     progress = undefined
+    sounds.setRadarActive(false)
     sample = 0
     contacts.visible = false
     status.text = 'DEEP SPACE / STANDBY'
@@ -226,7 +249,9 @@ function buildSensors(app: UIApp, station: UISciFiWindow, state: { power: number
     scan.enabled = true
     reset.enabled = false
   })
+  station.once('dispose', () => sounds.setRadarActive(false))
   station.once('dispose', app.on('update', ({ delta }) => {
+    sounds.setRadarActive(progress !== undefined && !state.paused)
     if (state.paused) return
     sweep.rotation.z -= delta * (0.3 + state.power / 100)
     if (progress === undefined) return
@@ -244,6 +269,7 @@ function buildSensors(app: UIApp, station: UISciFiWindow, state: { power: number
     scan.text = 'Rescan'
     scan.enabled = true
     progress = undefined
+    sounds.setRadarActive(false)
   }))
 }
 
