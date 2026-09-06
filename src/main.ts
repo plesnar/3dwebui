@@ -1,4 +1,4 @@
 import './style.css'
-import { createShowcaseApp } from './examples/showcase'
+import { createSciFiShowcaseApp } from './examples/sciFiShowcase'
 
-createShowcaseApp()
+createSciFiShowcaseApp()

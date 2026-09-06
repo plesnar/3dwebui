@@ -4,6 +4,7 @@ import { CameraOrbitController } from './CameraOrbitController'
 import { CornerBoundsOverlay } from './CornerBoundsOverlay'
 import { DebugInfoOverlay } from './DebugInfoOverlay'
 import { FpsOverlay } from './FpsOverlay'
+import { GlassBackgroundRenderer } from './GlassBackgroundRenderer'
 import { TopLevelSphereProjector } from './TopLevelSphereProjector'
 import { PointerInteractionController } from './PointerInteractionController'
 import { TrackingStatusOverlay } from './TrackingStatusOverlay'
@@ -13,6 +14,7 @@ import type { AppEventMap } from './AppEventMap'
 import type { UIAppOptions } from './UIAppOptions'
 import { UIWidget } from '../widgets/UIWidget'
 import { UIWindow } from '../widgets/UIWindow'
+import { UISciFiWindow } from '../widgets/UISciFiWindow'
 
 export class UIApp extends EventEmitter<AppEventMap> {
   private readonly scene: THREE.Scene
@@ -24,6 +26,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
   private readonly cameraOrbitController?: CameraOrbitController
   private readonly widgetRegistry = new WidgetRegistry()
   private readonly topLevelSphereProjector = new TopLevelSphereProjector()
+  private readonly glassBackgroundRenderer = new GlassBackgroundRenderer()
   private readonly pointerInteractionController: PointerInteractionController
   private readonly focusedWidgetBounds = new CornerBoundsOverlay({
     color: 0xf8fafc,
@@ -206,6 +209,8 @@ export class UIApp extends EventEmitter<AppEventMap> {
 
   public add(widget: UIWidget): this {
     this.widgetRegistry.add(widget, this.scene)
+    this.widgetDisposalListeners.get(widget)?.()
+    this.widgetDisposalListeners.set(widget, widget.once('dispose', () => this.remove(widget)))
     widget.handleAttached()
     this.emit('widgetadded', { type: 'widgetadded', app: this, widget })
     return this
@@ -214,6 +219,12 @@ export class UIApp extends EventEmitter<AppEventMap> {
   public remove(widget: UIWidget): this {
     if (!this.widgetRegistry.topLevel.includes(widget)) {
       return this
+    }
+
+    this.widgetDisposalListeners.get(widget)?.()
+    this.widgetDisposalListeners.delete(widget)
+    if (widget instanceof UISciFiWindow) {
+      this.glassBackgroundRenderer.release(widget)
     }
 
     if (this.focusedWidget && (this.focusedWidget === widget || widget.contains(this.focusedWidget))) {
@@ -263,7 +274,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
     return this._focusedWidget
   }
 
-  public get activeWindow(): UIWindow | undefined {
+  public get activeWindow(): UIWindow | UISciFiWindow | undefined {
     return this._activeWindow
   }
 
@@ -315,6 +326,12 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.fpsOverlay.dispose()
     this.trackingStatusOverlay.dispose()
     this.debugInfoOverlay.dispose()
+    this.glassBackgroundRenderer.dispose()
+
+    for (const unsubscribe of this.widgetDisposalListeners.values()) {
+      unsubscribe()
+    }
+    this.widgetDisposalListeners.clear()
 
     for (const widget of [...this.widgetRegistry.topLevel]) {
       widget.dispose()
@@ -343,7 +360,8 @@ export class UIApp extends EventEmitter<AppEventMap> {
   // ── internals ─────────────────────────────────────────────────────────────
 
   private _focusedWidget?: UIWidget
-  private _activeWindow?: UIWindow
+  private _activeWindow?: UIWindow | UISciFiWindow
+  private readonly widgetDisposalListeners = new Map<UIWidget, () => void>()
   private focusedSizeUnsubscribe?: () => void
   private activeWindowSizeUnsubscribe?: () => void
 
@@ -515,14 +533,14 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.refreshDebugInfoOverlay()
   }
 
-  private findContainingWindow(widget: UIWidget | undefined): UIWindow | undefined {
+  private findContainingWindow(widget: UIWidget | undefined): UIWindow | UISciFiWindow | undefined {
     if (!widget) {
       return undefined
     }
 
     let current: UIWidget | undefined = widget
     while (current) {
-      if (current instanceof UIWindow) {
+      if (current instanceof UIWindow || current instanceof UISciFiWindow) {
         return current
       }
 
@@ -583,6 +601,7 @@ export class UIApp extends EventEmitter<AppEventMap> {
     this.emit('update', { type: 'update', app: this, delta, camera: this.camera })
     this.emit('beforerender', { type: 'beforerender', app: this, delta, camera: this.camera })
 
+    this.glassBackgroundRenderer.capture(this.renderer, this.scene, this.camera, this.widgetRegistry.topLevel)
     this.renderer.render(this.scene, this.camera)
 
     this.fpsOverlay.update(delta)

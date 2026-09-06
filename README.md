@@ -50,6 +50,34 @@ npm run build
 npm run preview
 ```
 
+## Default Sci-Fi Showcase
+
+`src/main.ts` starts `createSciFiShowcaseApp()` from `src/examples/sciFiShowcase.ts`.
+Three glass stations use only `UISciFiWindow`, `UISciFiButton`, and matching
+monospace labels against a generated, deterministic starfield panorama:
+
+- **Sensor array**: animated sweep, timed scans, contact readouts, and reset/disabled states.
+- **Navigation**: a plane-draggable target, live coordinates, and a recenter command.
+- **Systems**: adjustable power that changes scan speed, Hold/Resume for the live
+  instruments, and Restore layout for the sphere-draggable windows.
+
+Desktop shows all three stations; portrait screens use matching station tabs.
+Drag a window to reposition it, or drag empty space to turn the camera. The
+starfield needs no downloaded assets, and its texture and instrument resources
+are released when the app closes. Readouts are simulated; no external service or
+webcam is required.
+
+Optional head and eye tracking uses the same setup as the original showcase.
+Allow webcam access, then press **H** to toggle hands-free camera control.
+Press **D** to show the debug camera feed while tracking is enabled. Turning
+tracking off clears the head offset and resets neutral-pose calibration.
+Tracking requires webcam permission and network access to load the MediaPipe
+model; the instruments remain usable when tracking is unavailable.
+
+The original mixed-component demo remains available through `createShowcaseApp()`
+in `src/examples/showcase.ts`; import and call that factory in `src/main.ts` to
+switch back.
+
 ## Project Structure
 
 ```
@@ -169,6 +197,61 @@ button.onClick((b) => {
 
 app.add(button)
 ```
+
+## Flat Sci-Fi Windows
+
+`UISciFiWindow` is a separate flat alternative to `UIWindow`, which remains unchanged.
+It has asymmetrically clipped corners, blue-tinted frosted glass, light borders,
+and optional line/status decorations. Its physical transmission material refracts
+and softly blurs the scene behind it while keeping the controls crisp.
+`UISciFiButton` provides matching flat controls with hover, press, and disabled feedback.
+
+```typescript
+import { UISciFiWindow } from './widgets/UISciFiWindow'
+import { UISciFiButton } from './widgets/UISciFiButton'
+
+const window = new UISciFiWindow({
+  title: 'ORBITAL / TELEMETRY',
+  width: 3.2,
+  height: 2.2,
+  color: 0x729bb7,
+  gradientColor: 0xc3e2ef,
+  transmission: 0.96,
+  roughness: 0.28,
+  ior: 1.45,
+  glassThickness: 0.32,
+  borderColor: 0x9ae7f2,
+  accentColor: 0xf2c879,
+  cornerCut: 0.22,
+})
+window.setDragController(new SphereDragController())
+const scan = new UISciFiButton({ text: 'Scan' })
+scan.setPosition(0, -0.5, window.depth + 0.01)
+scan.onClick(() => { window.title = 'SCAN COMPLETE' })
+window.addWidget(scan)
+app.add(window)
+```
+
+Increase `roughness` for more frosting, or decrease it toward zero for clear glass.
+`ior` and `glassThickness` control refraction; thickness is optical only, so the
+window geometry stays flat. Keep `opacity` at its default of `1` for glass; use
+`transmission` to control how much light passes through. Scene lighting and an
+environment map provide reflections (both are present in the showcase).
+`UIApp` captures the scene behind each visible sci-fi window, including transparent
+text labels and widgets, for refraction and blur. Foreground objects and the
+window's own controls are excluded from that capture and stay sharp. This adds one
+background render per visible sci-fi window at the canvas's CSS resolution; captures
+resize with the canvas and are released when the window is removed or the app closes.
+Outside `UIApp`, the material falls back to Three.js's standard transmission buffer,
+which only includes the scene background and opaque objects.
+
+Both window styles participate in the same global active-window tracking; the
+`activeWindow` property and event now return `UIWindow | UISciFiWindow | undefined`.
+The new window supports `title`, `opacity`, `setSize`, recursive disposal, and
+top-level dragging. Set `decorations: false` or `closable: false` to omit those
+elements. Cut-off corners and decorative objects do not intercept pointer input.
+The showcase includes a simulated telemetry scan with scan/reset controls and keeps
+the new panel centered and scaled to fit narrow viewports.
 
 ## Lifecycle & Disposal
 

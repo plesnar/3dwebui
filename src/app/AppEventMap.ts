@@ -2,6 +2,7 @@ import type * as THREE from 'three'
 import type { UIApp } from './UIApp'
 import type { UIWidget } from '../widgets/UIWidget'
 import type { UIWindow } from '../widgets/UIWindow'
+import type { UISciFiWindow } from '../widgets/UISciFiWindow'
 
 /** Base shape shared by every app event. */
 export interface AppEvent<TType extends string> {
@@ -21,7 +22,7 @@ export interface AppFocusChangeEvent extends AppEvent<'focuschange'> {
 
 /** Event fired when the globally active window changes. */
 export interface AppActiveWindowChangeEvent extends AppEvent<'activewindowchange'> {
-  readonly activeWindow: UIWindow | undefined
+  readonly activeWindow: UIWindow | UISciFiWindow | undefined
 }
 
 /** Event fired when debug mode is toggled on or off. */

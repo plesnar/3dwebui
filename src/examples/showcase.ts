@@ -4,11 +4,11 @@ import { UILabel } from '../widgets/UILabel'
 import { UIRectButton } from '../widgets/UIRectButton'
 import { UIWidget } from '../widgets/UIWidget'
 import { UIWindow } from '../widgets/UIWindow'
+import { UISciFiWindow } from '../widgets/UISciFiWindow'
+import { UISciFiButton } from '../widgets/UISciFiButton'
 import { PlaneDragController } from '../drag/PlaneDragController'
 import { SphereDragController } from '../drag/SphereDragController'
-import { EyeTrackingController } from '../app/EyeTrackingController'
-import { EyeTrackingOverlay } from '../app/EyeTrackingOverlay'
-import { HeadGazeCameraController } from '../app/HeadGazeCameraController'
+import { setupHeadGazeTracking } from './setupHeadGazeTracking'
 
 /**
  * A self-contained example that exercises the framework's headline features:
@@ -40,7 +40,8 @@ export function createShowcaseApp(): UIApp {
   const sphereDrag = new SphereDragController()
 
   buildInteractiveTiles(app, sphereDrag)
-  buildDashboardWindow(app, sphereDrag)
+  const dashboard = buildDashboardWindow(app, sphereDrag)
+  buildSciFiWindow(app, sphereDrag, dashboard)
   buildButtonVariants(app, sphereDrag)
   buildLabelVariants(app, sphereDrag)
   buildAnimatedWidget(app)
@@ -122,7 +123,7 @@ function buildInteractiveTiles(app: UIApp, sphereDrag: SphereDragController): vo
 // A 3D beveled window with a raised, beveled title bar that nests a label and a
 // button. The nested widgets sit on the window's front face and are dragged
 // within the window plane.
-function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): void {
+function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): UIWindow {
   const window = new UIWindow({
     name: 'dashboard',
     title: 'Dashboard',
@@ -135,7 +136,7 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
     titleBarHeight: 0.36,
     titleBarMargin: 0.06,
     titleBarElevation: -0.03,
-    position: [0, 0, 0],
+    position: [1.4, 0, 0],
   })
   window.setDragController(sphereDrag)
 
@@ -192,6 +193,114 @@ function buildDashboardWindow(app: UIApp, sphereDrag: SphereDragController): voi
   })
   window.addWidget(incButton)
 
+  app.add(window)
+  return window
+}
+
+function buildSciFiWindow(app: UIApp, sphereDrag: SphereDragController, dashboard: UIWindow): void {
+  const window = new UISciFiWindow({
+    name: 'sci-fi-telemetry',
+    title: 'ORBITAL / TELEMETRY',
+    width: 3.2,
+    height: 2.2,
+    position: [-0.7, 0, 0],
+  })
+  window.setDragController(sphereDrag)
+  let narrowLayout: boolean | undefined
+  const fitWindow = (): void => {
+    const camera = app.activeCamera
+    const narrow = camera.aspect < 1.2
+    if (narrow !== narrowLayout) {
+      window.setPosition(narrow ? 0 : -0.7, 0, 0)
+      dashboard.setPosition(narrow ? 2.7 : 1.4, 0, 0)
+      narrowLayout = narrow
+    }
+    const visibleWidth = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+      * UIWidget.TOP_LEVEL_BASE_RADIUS * camera.aspect
+    window.setScale(Math.min(1, visibleWidth / (window.width + 0.45)))
+  }
+  fitWindow()
+  window.on('dispose', app.on('resize', fitWindow))
+  const surfaceZ = window.depth + 0.01
+  const addReadout = (name: string, text: string, x: number, y: number, width: number, color: number, fontSize = 28): UILabel => {
+    const label = new UILabel({
+      name,
+      text,
+      textColor: color,
+      textAlign: 'left',
+      font: `500 ${fontSize}px "Menlo", "Consolas", monospace`,
+      width,
+      height: 0.25,
+      position: [x, y, surfaceZ],
+    })
+    label.mesh.userData['uiOverlay'] = true
+    label.mesh.traverse((object) => {
+      object.raycast = () => {}
+      if (object instanceof THREE.Mesh) {
+        object.material.depthWrite = false
+        object.material.toneMapped = false
+      }
+    })
+    window.addWidget(label)
+    return label
+  }
+
+  addReadout('telemetry-sector', 'SECTOR 07 / RELAY', -0.52, 0.45, 1.65, 0xb0dce8)
+  const status = addReadout('telemetry-status', 'STANDBY', 0.88, 0.45, 0.8, 0xf2c879)
+  addReadout('telemetry-range-label', 'RANGE', -0.96, 0.07, 0.75, 0x8db5c8, 24)
+  addReadout('telemetry-signal-label', 'SIGNAL', 0.52, 0.07, 0.75, 0x8db5c8, 24)
+  const range = addReadout('telemetry-range', '--- km', -0.63, -0.2, 1.4, 0xe0faff, 40)
+  const signal = addReadout('telemetry-signal', '--- %', 0.79, -0.2, 1.3, 0xe0faff, 40)
+  const scan = new UISciFiButton({
+    name: 'telemetry-scan',
+    text: 'Scan',
+    width: 1.12,
+    height: 0.34,
+    position: [-0.72, -0.64, surfaceZ],
+  })
+  const reset = new UISciFiButton({
+    name: 'telemetry-reset',
+    text: 'Reset',
+    width: 1.12,
+    height: 0.34,
+    color: 0x253c49,
+    borderColor: 0xadc2c8,
+    position: [0.72, -0.64, surfaceZ],
+  })
+  reset.enabled = false
+  let scanElapsed: number | undefined
+  let sample = 0
+  scan.onClick(() => {
+    scanElapsed = 0
+    status.text = 'SCANNING'
+    scan.text = 'Scanning'
+    scan.enabled = false
+    reset.enabled = true
+  })
+  reset.onClick(() => {
+    scanElapsed = undefined
+    sample = 0
+    status.text = 'STANDBY'
+    range.text = '--- km'
+    signal.text = '--- %'
+    scan.text = 'Scan'
+    scan.enabled = true
+    reset.enabled = false
+  })
+  const stopUpdating = app.on('update', ({ delta }) => {
+    if (scanElapsed === undefined) return
+    scanElapsed += delta
+    if (scanElapsed < 0.9) return
+    sample += 1
+    range.text = `${(842.6 + sample * 0.7).toFixed(1)} km`
+    signal.text = `${96 + sample % 4} %`
+    status.text = 'LINKED'
+    scan.text = 'Rescan'
+    scan.enabled = true
+    scanElapsed = undefined
+  })
+  window.on('dispose', stopUpdating)
+  window.addWidget(scan).addWidget(reset)
   app.add(window)
 }
 
@@ -332,45 +441,4 @@ function buildAnimatedWidget(app: UIApp): void {
   app.on('update', (event) => {
     spinner.rotation.z += event.delta * 1.5
   })
-}
-
-// ── head-gaze tracking ───────────────────────────────────────────────────────
-// Optionally drives the camera from the webcam: the head-gaze controller nudges
-// the orbit camera, and a debug overlay shows the camera feed while tracking is
-// active. Toggle tracking with "H" and debug overlays with "D".
-function setupHeadGazeTracking(app: UIApp): void {
-  const tracker = new EyeTrackingController({ fps: 15, pauseWhenHidden: true })
-  tracker
-    .init()
-    .then(() => {
-      // The camera feed is a debug-only visualisation, shown only while tracking.
-      const overlay = new EyeTrackingOverlay(app.sceneRoot, app.activeCamera, tracker)
-      const refreshOverlay = (): void => overlay.setVisible(app.debug && app.trackingEnabled)
-      refreshOverlay()
-      app.on('debugchange', refreshOverlay)
-      app.on('trackingchange', refreshOverlay)
-      app.registerUpdateCallback(() => {
-        if (app.trackingEnabled) {
-          overlay.update()
-        }
-      })
-
-      if (app.orbitController) {
-        const headGaze = new HeadGazeCameraController(tracker, app.orbitController)
-        app.registerUpdateCallback(() => {
-          if (app.trackingEnabled) {
-            headGaze.update()
-          }
-        })
-        // Re-centre and re-calibrate the neutral pose when tracking is toggled off.
-        app.on('trackingchange', (event) => {
-          if (!event.enabled) {
-            headGaze.calibrate()
-          }
-        })
-      }
-    })
-    .catch((err: unknown) => {
-      console.warn('Eye tracking unavailable:', err)
-    })
 }
